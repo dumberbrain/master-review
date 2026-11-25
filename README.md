@@ -1,5 +1,7 @@
 # master-review
 
+**English** | [Azərbaycanca](README.az.md)
+
 Code-review skills for AI coding agents. Give your agent a pull request diff or a whole
 repository; get back a Markdown report with findings anchored to real lines, each citing a
 named rule with its reason and fix. The skills only write reports. They never post, commit,

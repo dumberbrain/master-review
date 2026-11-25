@@ -2,9 +2,7 @@ import fs from 'node:fs';
 import { parsePatch } from './diff.mjs';
 import { rulesFor } from './languages.mjs';
 
-export const LOCAL_SHA = '0000000000000000000000000000000000000000';
-
-// Turns raw platform files into reviewable ChangedFiles (data-model.md).
+// Turns parsed diff files into reviewable files: language, rule files and commentable lines.
 export function buildMr(raw, cfg) {
   const files = raw.files.map((f) => {
     const base = { path: f.path, oldPath: f.oldPath ?? undefined, changeType: f.changeType, patch: f.patch ?? null };
@@ -12,11 +10,11 @@ export function buildMr(raw, cfg) {
     const r = rulesFor(f.path, cfg);
     if (r.skipped) return { ...base, language: null, ruleFiles: [], skipped: r.skipped };
     if (!f.patch) return { ...base, language: r.language, ruleFiles: r.ruleFiles, skipped: { reason: 'no-patch (binary or too large)' } };
-    const { validLines, hunks, oldLineOf } = parsePatch(f.patch);
+    const { validLines, hunks } = parsePatch(f.patch);
     if (validLines.length === 0) {
       return { ...base, language: r.language, ruleFiles: r.ruleFiles, skipped: { reason: 'no added lines' } };
     }
-    return { ...base, language: r.language, ruleFiles: r.ruleFiles, validLines, hunks, oldLineOf };
+    return { ...base, language: r.language, ruleFiles: r.ruleFiles, validLines, hunks };
   });
   return { ...raw, files };
 }
@@ -140,9 +138,6 @@ export function loadLocalDiff(filePath, { platform = 'github', title } = {}) {
     number: 0,
     url: `file:${filePath.replace(/\\/g, '/')}`,
     title: title || `Pasted diff ${filePath.replace(/\\/g, '/').split('/').pop()}`,
-    baseSha: LOCAL_SHA,
-    startSha: null,
-    headSha: LOCAL_SHA,
     files,
   };
 }

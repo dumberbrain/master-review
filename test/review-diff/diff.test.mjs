@@ -10,7 +10,6 @@ test('parsePatch maps added and context lines to new-side line numbers', () => {
   assert.deepEqual(r.hunks, [{ newStart: 1, newEnd: 4 }]);
   assert.equal(r.text[2], 'B');
   assert.equal(r.text[4], 'd');
-  assert.deepEqual(r.oldLineOf, { 1: 1, 4: 3 });
 });
 
 test('parsePatch handles several hunks and headers without counts', () => {
