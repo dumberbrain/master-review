@@ -1,0 +1,13 @@
+{
+  "name": "master-review",
+  "private": true,
+  "description": "Review skills for Claude Code and Junie: review-diff (pasted PR/MR diffs) and review-repo (whole repository).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "sync": "node scripts/sync-skills.mjs",
+    "sync:check": "node scripts/sync-skills.mjs --check"
+  }
+}

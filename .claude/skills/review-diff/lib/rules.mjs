@@ -61,9 +61,10 @@ export function loadLanguages(rulesDir = RULES_DIR) {
   return JSON.parse(fs.readFileSync(path.join(rulesDir, 'languages.json'), 'utf8'));
 }
 
-export function loadRules(rulesDir = RULES_DIR) {
+// `extra` names additional rule files in `rulesDir` that apply to every file (e.g. repo.md).
+export function loadRules(rulesDir = RULES_DIR, { extra = [] } = {}) {
   const cfg = loadLanguages(rulesDir);
-  const fileNames = [cfg.general, ...Object.values(cfg.languages).map((l) => l.file)];
+  const fileNames = [cfg.general, ...Object.values(cfg.languages).map((l) => l.file), ...extra];
   const files = fileNames.map((name) =>
     parseRuleFile(fs.readFileSync(path.join(rulesDir, name), 'utf8'), name),
   );
