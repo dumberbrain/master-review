@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildMr, parseGitDiff } from '../../.claude/skills/review-diff/lib/merge-request.mjs';
+import { buildMr, parseGitDiff, readQuoted } from '../../.claude/skills/review-diff/lib/merge-request.mjs';
 import { loadLanguages } from '../../.claude/skills/review-diff/lib/rules.mjs';
 import { lines } from '../helpers.mjs';
 
@@ -84,9 +84,13 @@ test('buildMr attaches rule files and skips deleted, binary and lock files', () 
 });
 
 // git quotes paths with non-ASCII characters (core.quotePath), e.g. Azerbaijani file names.
-// Today the quoted header is not recognised and the file's hunks are appended to the
-// previous file's patch.
-test('parseGitDiff handles quoted non-ASCII paths', { todo: 'quoted "a/..." headers are not parsed yet' }, () => {
+// "s\311\231b\311\231t.js" is the UTF-8 encoding of "səbət.js".
+const Q = String.raw`"a/s\311\231b\311\231t.js"`;
+const QB = String.raw`"b/s\311\231b\311\231t.js"`;
+const QPATH = String.raw`"s\311\231b\311\231t.js"`;
+const QSAY = String.raw`"b/say \"hi\"\tnow.md"`;
+
+test('parseGitDiff decodes quoted non-ASCII paths and keeps each file separate', () => {
   const diff = lines(
     'diff --git a/x.js b/x.js',
     '--- a/x.js',
@@ -94,17 +98,102 @@ test('parseGitDiff handles quoted non-ASCII paths', { todo: 'quoted "a/..." head
     '@@ -1 +1,2 @@',
     ' a',
     '+b',
-    'diff --git "a/s\\311\\231b\\311\\231t.js" "b/s\\311\\231b\\311\\231t.js"',
-    '--- "a/s\\311\\231b\\311\\231t.js"',
-    '+++ "b/s\\311\\231b\\311\\231t.js"',
+    `diff --git ${Q} ${QB}`,
+    `--- ${Q}`,
+    `+++ ${QB}`,
     '@@ -1 +1,2 @@',
     ' c',
     '+d',
   );
   const files = parseGitDiff(diff);
   assert.deepEqual(
-    files.map((f) => f.path),
-    ['x.js', 'səbət.js'],
+    files.map((f) => [f.path, f.changeType, f.patch]),
+    [
+      ['x.js', 'modified', ['@@ -1 +1,2 @@', ' a', '+b'].join('\n')],
+      ['səbət.js', 'modified', ['@@ -1 +1,2 @@', ' c', '+d'].join('\n')],
+    ],
   );
-  assert.equal(files[0].patch, ['@@ -1 +1,2 @@', ' a', '+b'].join('\n'));
+});
+
+test('parseGitDiff handles quoted renames, mixed quoting and escaped characters', () => {
+  const diff = lines(
+    `diff --git a/old.js ${QB}`,
+    'similarity index 95%',
+    'rename from old.js',
+    `rename to ${QPATH}`,
+    '--- a/old.js',
+    `+++ ${QB}`,
+    '@@ -1 +1 @@',
+    '-a',
+    '+b',
+    `diff --git ${QSAY.replace('"b/', '"a/')} ${QSAY}`,
+    'new file mode 100644',
+    '--- /dev/null',
+    `+++ ${QSAY}`,
+    '@@ -0,0 +1 @@',
+    '+hi',
+  );
+  const files = parseGitDiff(diff);
+  assert.deepEqual(
+    files.map((f) => [f.path, f.oldPath, f.changeType]),
+    [
+      ['səbət.js', 'old.js', 'renamed'],
+      ['say "hi"\tnow.md', undefined, 'added'],
+    ],
+  );
+});
+
+test('parseGitDiff: plain paths with spaces (trailing tab on ---/+++) and deleted files', () => {
+  const diff = lines(
+    'diff --git a/my docs/a b.md b/my docs/a b.md',
+    '--- a/my docs/a b.md\t',
+    '+++ b/my docs/a b.md\t',
+    '@@ -1 +1 @@',
+    '-x',
+    '+y',
+    `diff --git ${Q} ${QB}`,
+    'deleted file mode 100644',
+    `--- ${Q}`,
+    '+++ /dev/null',
+    '@@ -1 +0,0 @@',
+    '-gone',
+  );
+  assert.deepEqual(
+    parseGitDiff(diff).map((f) => [f.path, f.changeType]),
+    [
+      ['my docs/a b.md', 'modified'],
+      ['səbət.js', 'deleted'],
+    ],
+  );
+});
+
+test('parseGitDiff: an unrecognised header never leaks hunks into the previous file', () => {
+  const diff = lines(
+    'diff --git a/x.js b/x.js',
+    '--- a/x.js',
+    '+++ b/x.js',
+    '@@ -1 +1 @@',
+    '-a',
+    '+b',
+    'diff --git x.js y.js',
+    '--- x.js',
+    '+++ y.js',
+    '@@ -1 +1 @@',
+    '-c',
+    '+d',
+  );
+  const files = parseGitDiff(diff);
+  assert.deepEqual(
+    files.map((f) => [f.path, f.patch]),
+    [
+      ['x.js', ['@@ -1 +1 @@', '-a', '+b'].join('\n')],
+      ['y.js', ['@@ -1 +1 @@', '-c', '+d'].join('\n')],
+    ],
+  );
+});
+
+test('readQuoted decodes octal UTF-8 bytes and C escapes', () => {
+  assert.deepEqual(readQuoted(String.raw`"a\303\274b" rest`), { value: 'aüb', end: 12 });
+  assert.equal(readQuoted(String.raw`"tab\there\\"`).value, 'tab\there\\');
+  assert.equal(readQuoted('"plain ə"').value, 'plain ə');
 });
