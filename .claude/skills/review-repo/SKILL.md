@@ -13,12 +13,14 @@ the only files you write are under `.review-repo/` and the report itself.
 
 ## Setup
 
-- `SKILL_ROOT` = this skill's base directory (the folder that contains `bin/`, `lib/`, `rules/`).
+- `SKILL_ROOT` = this skill's base directory: the folder that holds this `SKILL.md` and
+  `bin/`, `lib/`, `rules/` (e.g. `.claude/skills/review-repo`, `.agents/skills/review-repo`).
 - `HELPER` = `node "<SKILL_ROOT>/bin/review-repo.mjs"` — always quote paths, they may contain spaces.
+  The helper needs Node.js >= 18 and a shell; it has no dependencies.
 - `WORK` = `.review-repo/` in the current working directory. Keep it after the run.
-- Arguments (`$ARGUMENTS`): an optional sub-folder to limit the review to (monorepos, big repos)
-  and an optional output path. An argument ending in `.md` is the output path. Default output:
-  `./repo-review.md`.
+- Arguments (in Claude Code `$ARGUMENTS`; in other agents take them from the user's message):
+  an optional sub-folder to limit the review to (monorepos, big repos) and an optional output
+  path. An argument ending in `.md` is the output path. Default output: `./repo-review.md`.
 
 ## Steps
 

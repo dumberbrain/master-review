@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { sync } from '../scripts/sync-skills.mjs';
 import { ROOT, runNode, tempDir, writeTree } from './helpers.mjs';
 
-test('this repository is in sync (.junie mirrors .claude, review-repo has the shared files)', () => {
+test('this repository is in sync (.agents and .junie mirror .claude, review-repo has the shared files)', () => {
   const r = runNode(path.join(ROOT, 'scripts', 'sync-skills.mjs'), ['--check']);
   assert.equal(r.status, 0, `run \`npm run sync\`:\n${r.stdout}`);
 });
@@ -38,6 +38,8 @@ test('sync copies shared files, mirrors skills exactly and keeps target-only fil
   assert.equal(read('.claude/skills/review-repo/rules/repo.md'), 'repo rules');
   assert.ok(!fs.existsSync(path.join(root, '.claude/skills/review-repo/lib/diff.mjs')), 'only shared paths are copied');
   assert.equal(read('.junie/skills/review-diff/SKILL.md'), 'diff skill v2');
+  assert.equal(read('.agents/skills/review-diff/SKILL.md'), 'diff skill v2');
+  assert.equal(read('.agents/skills/review-repo/rules/repo.md'), 'repo rules');
   assert.equal(read('.junie/skills/review-repo/rules/general.md'), 'general v2');
   assert.ok(!fs.existsSync(path.join(root, '.junie/skills/review-diff/stale.txt')), 'extra mirror files are deleted');
   assert.equal(read('.junie/skills/other/SKILL.md'), 'junie-only skill', 'mirror-only skills are kept');

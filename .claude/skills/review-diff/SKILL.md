@@ -13,14 +13,18 @@ GitHub/GitLab web UI by hand. **You never post, comment, approve or push anythin
 
 ## Setup
 
-- `SKILL_ROOT` = this skill's base directory (the folder that contains `bin/`, `lib/`, `rules/`).
+- `SKILL_ROOT` = this skill's base directory: the folder that holds this `SKILL.md` and
+  `bin/`, `lib/`, `rules/` (e.g. `.claude/skills/review-diff`, `.agents/skills/review-diff`).
 - `HELPER` = `node "<SKILL_ROOT>/bin/review.mjs"` — always quote paths, they may contain spaces.
+  The helper needs Node.js >= 18 and a shell; it has no dependencies.
 - `WORK` = `.review-comment/` in the current working directory. Keep it after the run.
-- Output path: second argument of `$ARGUMENTS`, default `./review.md`.
+- Arguments: in Claude Code they arrive as `$ARGUMENTS` (`[diff-file] [output-path]`); in other
+  agents take them from the user's message. Output path: the second argument, default
+  `./review.md`.
 
 ## Step 0: get the diff
 
-- If `$ARGUMENTS` starts with a path to an existing `.diff` / `.patch` file, use it as `DIFF`.
+- If the first argument is a path to an existing `.diff` / `.patch` file, use it as `DIFF`.
 - Otherwise take the diff the user pasted in the conversation and Write it **verbatim** to
   `.review-comment/input.diff` (no reformatting, no trimming of lines) — that is `DIFF`.
 - Platform: `gitlab` if the user says GitLab / the paste came from a GitLab MR, otherwise

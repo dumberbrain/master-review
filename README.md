@@ -1,68 +1,99 @@
 # master-review
 
-Code-review skills for Claude Code (`.claude/skills/`) and Junie (`.junie/skills/`). They only
-write Markdown reports; nothing is posted, committed or changed in the reviewed code.
+Code-review skills for AI coding agents. Give your agent a pull request diff or a whole
+repository; get back a Markdown report with findings anchored to real lines, each citing a
+named rule with its reason and fix. The skills only write reports. They never post, commit,
+push or change the reviewed code.
 
-| Skill | What it reviews | Output |
+| Skill | Reviews | Writes |
 |-|-|-|
-| `review-diff` | a GitHub PR / GitLab MR diff you paste (or a `.diff` file) | `review.md` with copy-paste review comments (file, line, severity, rule, suggested code) |
-| `review-repo` | the whole repository (or one sub-folder) | `repo-review.md` with prioritized findings: repository-level problems (secrets, tests, CI, lockfiles, structure) and file/line issues |
+| **review-diff** | a GitHub PR / GitLab MR diff (pasted or a `.diff` file) | `review.md`: copy-paste comments with the line to click, severity, rule and suggested code |
+| **review-repo** | a whole repository or one sub-folder | `repo-review.md`: overview, repository-level problems (secrets, tests, CI, lockfiles, structure), prioritized findings, coverage |
 
-## review-diff
+Works with **Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI, Cursor and JetBrains Junie**
+(open [Agent Skills](https://agentskills.io/specification) format). Needs Node.js >= 18.
 
-1. Get the diff:
-   - GitHub: `https://github.com/<owner>/<repo>/pull/<n>.diff`
-   - GitLab: `https://<host>/<group>/<project>/-/merge_requests/<n>.diff`
-   - Local: `git diff main...HEAD`
-2. In Claude Code (opened in this folder): `/review-diff` and paste the diff (say "GitLab" for MR diffs), or `/review-diff path/to/file.diff [output.md]`.
-3. Open `review.md`.
+## Quick start
 
-Working files go to `.review-comment/`.
+**1. Install into the repository you want to review**
 
-## review-repo
+```bash
+git clone https://github.com/dumberbrain/master-review.git
+node master-review/scripts/install-skills.mjs --target path/to/your-repo
+```
 
-1. Install the skill in the repository you want to review (see below) and open Claude Code there.
-2. Run `/review-repo`, `/review-repo src/api` (one sub-folder) or `/review-repo . audit.md` (other output file).
-3. Open `repo-review.md`.
+This installs both skills for Claude Code (`.claude/skills/`) and for Codex, Copilot, Gemini
+CLI and Cursor (`.agents/skills/`). Other options:
 
-How it works: a helper scans the repo first (file inventory, languages, git hotspots, test and
-CI presence, manifests without lockfiles, secret candidates, TODOs, committed build output)
-and picks the files to read first. The model then reads the docs, config and priority files,
-reviews them against the same rule files as `review-diff` plus `rules/repo.md` (`REPO-*`), and
-the helper validates every finding (rule id, file, line range) before rendering the report.
-Secret values are never written to the scan or the report. Working files go to `.review-repo/`;
-add it and `repo-review.md` to the reviewed repo's `.gitignore`.
+- `--agents claude`, `--agents agents` or `--agents claude,junie` for specific agents;
+- `--user` installs for all your repositories at once.
 
-On a large repository only the priority files (40 by default) are read in full; the report's
-**Coverage** section lists what was and was not read. Pass a sub-folder for a deeper pass.
+See [docs/agents.md](docs/agents.md#installing).
 
-## Using the skills in other repositories
+Add the outputs to the reviewed repository's `.gitignore`:
 
-Each skill folder is self-contained (Node >= 18, no dependencies). Copy it:
+```gitignore
+.review-comment/
+review.md
+.review-repo/
+repo-review.md
+```
 
-- one repository, Claude Code: `.claude/skills/<skill>/` → `<repo>/.claude/skills/<skill>/`
-- every repository on your machine, Claude Code: → `~/.claude/skills/<skill>/`
-- Junie: `.junie/skills/<skill>/` → `<repo>/.junie/skills/<skill>/`
+**2. Review a pull request**
 
-The review skills skip their own folders when scanning a repository.
+```bash
+gh pr diff 42 > pr-42.diff          # or open https://github.com/<owner>/<repo>/pull/42.diff
+```
 
-## Layout
+In Claude Code: `/review-diff pr-42.diff`. In other agents: *"Review pr-42.diff with the
+review-diff skill"*. Open `review.md` and paste the comments you agree with into the PR.
 
-- `.claude/skills/review-diff/` — `SKILL.md` (steps), `bin/review.mjs` (helper CLI: `parse`, `lines`, `validate`, `render`), `lib/`, `rules/`
-- `.claude/skills/review-repo/` — `SKILL.md`, `bin/review-repo.mjs` (helper CLI: `scan`, `validate`, `render`), `lib/`, `rules/repo.md`
-- `rules/*.md` — rule files (general, C#, Go, Java, JS, TS, React, repository); edit them to change what gets flagged
-- `.junie/skills/` — generated copy for Junie, do not edit
-- `scripts/sync-skills.mjs` — keeps the copies in sync
-- `test/` — tests (`node:test`, no dependencies)
+**3. Review the whole repository**
 
-## Development
+In Claude Code: `/review-repo`, or `/review-repo src/api` for one folder. In other agents:
+*"Run the review-repo skill on this repository"*. Open `repo-review.md`.
 
-`.claude/skills/` is the single source of truth:
+## Documentation
 
-- edit skills only under `.claude/skills/`;
-- edit shared files (`rules/*` except `repo.md`, `lib/errors.mjs`, `lib/languages.mjs`, `lib/rules.mjs`) only in `review-diff` — `review-repo` gets a copy;
-- after a change run `npm run sync`, then `npm test` (Node >= 22 for the test runner).
+| Document | Read it for |
+|-|-|
+| [docs/overview.md](docs/overview.md) | purpose, how it works, rules and severities, limitations |
+| [docs/review-diff.md](docs/review-diff.md) | getting diffs, running, reading `review.md`, pasting into GitHub/GitLab, CLI reference, troubleshooting |
+| [docs/review-repo.md](docs/review-repo.md) | what is scanned, which files are read, reading `repo-review.md`, secrets, large repos, CLI reference, troubleshooting |
+| [docs/agents.md](docs/agents.md) | supported agents and their folders, installing, running in each agent, **rules for portable skills** |
+| [docs/rules.md](docs/rules.md) | rule file format; editing, adding and retiring rules; adding a language; skipping files |
+| [docs/development.md](docs/development.md) | repository layout, the single-source rule, tests, changing or adding a skill |
+| [AGENTS.md](AGENTS.md) | instructions for AI agents working on this repository |
 
-`npm run sync:check` (also part of `npm test`) fails when a copy is out of date. The tests also
-lint the rule files: heading format, unique ids, prefixes, severity/status values and the
-`look-for` / `why` / `fix` fields.
+## How it works
+
+The agent does the judgement: it reads the code and the rules and writes findings as JSON.
+A small Node.js helper in each skill does everything that must be exact:
+
+- parsing the diff or scanning the repository;
+- listing the lines that can carry a comment;
+- rejecting findings with unknown rules, rules for the wrong language, or impossible line
+  numbers;
+- rendering the report.
+
+Details: [docs/overview.md](docs/overview.md#how-it-works).
+
+## Rules
+
+Rules are Markdown files that your team can edit:
+
+- general rules (`GEN`);
+- C# (`CS`), Go (`GO`), Java (`JAVA`), JavaScript (`JS`), TypeScript (`TS`), React (`REACT`);
+- repository-level rules (`REPO`).
+
+Every finding cites exactly one rule. See [docs/rules.md](docs/rules.md).
+
+## Developing this repository
+
+```bash
+npm run sync    # after editing anything under .claude/skills/
+npm test        # Node.js >= 22 for the test runner
+```
+
+Edit skills only under `.claude/skills/`. `.agents/skills/` and `.junie/skills/` are generated.
+See [docs/development.md](docs/development.md).

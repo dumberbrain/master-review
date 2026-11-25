@@ -5,8 +5,9 @@
 //   1. copies the files review-repo shares with review-diff (rule files and common libs)
 //      from review-diff into review-repo, so each skill folder stays self-contained and can
 //      be copied into another repository on its own;
-//   2. mirrors every `.claude/skills/<name>/` into `.junie/skills/<name>/` (extra files in the
-//      mirror are deleted; skills that exist only in the mirror are left alone).
+//   2. mirrors every `.claude/skills/<name>/` into `.agents/skills/<name>/` (the cross-agent
+//      folder read by Codex, Copilot, Gemini CLI and Cursor) and `.junie/skills/<name>/`
+//      (extra files in a mirror are deleted; skills that exist only in a mirror are left alone).
 //
 // usage: node scripts/sync-skills.mjs [--check]
 //   --check  report what is out of sync without writing anything (exit 1 when out of sync)
@@ -14,8 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const SOURCE = '.claude/skills';
-const MIRRORS = ['.junie/skills'];
+export const SOURCE = '.claude/skills';
+export const MIRRORS = ['.agents/skills', '.junie/skills'];
 
 // Paths (files or folders) copied from one skill into another. Files that exist only in the
 // target (e.g. review-repo/rules/repo.md) are kept.
@@ -50,11 +51,9 @@ function join(base, rel) {
   return rel ? path.join(base, rel) : base;
 }
 
-// Copies every file under `from` to the same relative place under `to`.
-// With `exact`, files under `to` that do not exist under `from` are deleted.
-function planCopy(root, from, to, { exact }) {
-  const src = path.join(root, from);
-  const dst = path.join(root, to);
+// Plans copying every file under `src` to the same relative place under `dst` (absolute paths).
+// With `exact`, files under `dst` that do not exist under `src` are deleted.
+export function planCopy(src, dst, { exact }) {
   const changes = [];
   const srcFiles = listFiles(src);
   for (const rel of srcFiles) {
@@ -76,7 +75,7 @@ export function planShared(root) {
     const toSkill = path.posix.join(SOURCE, s.to);
     if (!fs.existsSync(path.join(root, fromSkill)) || !fs.existsSync(path.join(root, toSkill))) continue;
     for (const p of s.paths) {
-      changes.push(...planCopy(root, path.posix.join(fromSkill, p), path.posix.join(toSkill, p), { exact: false }));
+      changes.push(...planCopy(path.join(root, fromSkill, p), path.join(root, toSkill, p), { exact: false }));
     }
   }
   return changes;
@@ -89,7 +88,7 @@ export function planMirrors(root) {
   const skills = fs.readdirSync(src, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
   for (const mirror of MIRRORS) {
     for (const skill of skills) {
-      changes.push(...planCopy(root, path.posix.join(SOURCE, skill), path.posix.join(mirror, skill), { exact: true }));
+      changes.push(...planCopy(path.join(root, SOURCE, skill), path.join(root, mirror, skill), { exact: true }));
     }
   }
   return changes;
