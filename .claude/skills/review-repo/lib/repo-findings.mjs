@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CliError, EXIT } from './errors.mjs';
-import { SEVERITIES } from './rules.mjs';
+import { GENERAL, SEVERITIES } from './rules.mjs';
 
-export const REPO_RULE_FILE = 'repo.md';
+// review-repo's own pack (rules/packs/repo/): repository-level rules, scoped to every file.
+export const REPO_PACKS = {
+  repo: { title: 'Repository-level rules: secrets, tests, CI, dependencies, structure' },
+};
 const MAX_SNIPPET_LINES = 12;
 
 function diskReader(root) {
@@ -21,10 +24,11 @@ function snippetOf(lines, startLine, line) {
   return out.join('\n');
 }
 
-// Rule prefixes allowed for a file: its language rule files, plus repository-level rules.
-function allowedPrefixes(file, rules) {
-  const own = file && !file.skipped ? file.ruleFiles.map((rf) => rules.prefixOfFile[rf]) : [rules.prefixOfFile[rules.cfg.general]];
-  return [...own, rules.prefixOfFile[REPO_RULE_FILE]];
+// Rule files allowed for a finding: the file's own rule files (general ones, including the repo
+// pack, plus its languages); for a skipped file or a repository-wide finding, the general ones.
+function allowedRuleFiles(file, rules) {
+  if (file && !file.skipped) return file.ruleFiles;
+  return rules.files.filter((f) => f.enabled && f.language === GENERAL).map((f) => f.id);
 }
 
 function checkLocation(loc, files, { requireLine }) {
@@ -50,6 +54,7 @@ function checkOne(raw, files, rules, read) {
   }
   const rule = rules.byId.get(f.ruleId);
   if (!rule) return { error: `unknown ruleId ${f.ruleId}` };
+  if (!rule.packEnabled) return { error: `rule ${f.ruleId} belongs to the disabled pack "${rule.pack}"` };
   if (rule.status !== 'active') return { error: `rule ${f.ruleId} is retired` };
   f.severity = f.severity ?? rule.severity;
   if (!SEVERITIES.includes(f.severity)) return { error: `invalid severity ${f.severity}` };
@@ -72,9 +77,9 @@ function checkOne(raw, files, rules, read) {
   }
 
   const file = f.path ? files.get(f.path) : undefined;
-  const allowed = allowedPrefixes(file, rules);
-  if (!allowed.includes(rule.prefix)) {
-    return { error: `rule ${f.ruleId} does not apply to ${f.path ?? 'a repository-wide finding'} (allowed: ${allowed.join(', ')})` };
+  const allowed = allowedRuleFiles(file, rules);
+  if (!allowed.includes(rule.file)) {
+    return { error: `rule ${f.ruleId} (${rule.file}) does not apply to ${f.path ?? 'a repository-wide finding'} (allowed rule files: ${allowed.join(', ')})` };
   }
 
   if (f.related !== undefined) {

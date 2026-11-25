@@ -39,12 +39,18 @@ GitHub/GitLab web UI by hand. **You never post, comment, approve or push anythin
 1. **Parse** — `HELPER parse "<DIFF>" --out .review-comment/mr.json --platform <github|gitlab> --title "<short title>"`
    - Exit 1: not a git diff (needs `diff --git a/... b/...` headers). Show the message, ask the
      user for the full `.diff` output, write no `review.md`, and stop.
+   - Rule config: the helper uses `./review.config.json` when it exists. If the user names
+     another config file, add `--config "<file>"`.
+   - Exit 1 naming a config or rule file: show the message and stop; the user must fix it.
    - The JSON on stdout lists `reviewable` files with their `ruleFiles` and commentable
-     `lines`, and `skippedFiles` with reasons. Read it.
+     `lines`, `skippedFiles` with reasons, and `rules` (enabled `packs`, `files`,
+     `overrides`). Read it.
 
-2. **Load rules** — for the set of all `ruleFiles` across reviewable files, read each one from
-   `<SKILL_ROOT>/rules/` once. Use only rules with `status: active`. A `.tsx`/`.jsx` file gets
-   general + TypeScript/JavaScript + React rules, as listed in its `ruleFiles`.
+2. **Load rules** — read each path in `rules.files` once (keys are rule file ids like
+   `owasp/general.md`, values are the paths to read). Each reviewable file may only cite rules
+   from the ids in its own `ruleFiles`. Use only rules with `status: active`, then apply
+   `rules.overrides` on top of the files: `status: retired` there means never cite the rule,
+   and `severity` there replaces the rule's default.
 
 3. **Review** — read the patches in `.review-comment/mr.json` (`files[].patch`), in batches of
    about 10 files for large diffs. For each issue you find:
@@ -52,8 +58,8 @@ GitHub/GitLab web UI by hand. **You never post, comment, approve or push anythin
    - Anchor it to new-side line numbers from the file's `lines` / `validLines`
      (`HELPER lines .review-comment/mr.json <path>` prints them). If an issue is real but not
      on a commentable line, make it a general note (`"general": true`).
-   - Cite exactly one `ruleId`. Prefer the most specific language rule; use `GEN-*` only when
-     no language rule fits. Never invent rule ids. If no rule fits at all, do not report it.
+   - Cite exactly one `ruleId`. Prefer a rule from a language rule file; use a rule from a
+     `general` file (e.g. `GEN-*`) only when no language rule fits. Never invent rule ids. If no rule fits at all, do not report it.
    - Write `body` as a short, friendly review comment in Markdown: what is wrong, why it
      matters (from the rule's `why`), and what to do. 1–4 sentences. No rule-file text dumps.
    - Add `suggestion` only when it is a drop-in replacement for exactly lines
@@ -93,8 +99,8 @@ GitHub/GitLab web UI by hand. **You never post, comment, approve or push anythin
    `line` (unless general), `ruleId`, `title`, `body`.
 
 5. **Validate** — `HELPER validate .review-comment/mr.json .review-comment/findings.json --out .review-comment/review.json`
-   - Exit 1 lists `invalid` findings with the reason: fix those entries (wrong rule for the
-     file's language, unknown rule id, bad fields) and run validate again. Never "fix" a line
+   - Exit 1 lists `invalid` findings with the reason: fix those entries (rule not in the
+     file's `ruleFiles`, rule from a disabled pack, unknown rule id, bad fields) and run validate again. Never "fix" a line
      number by guessing — re-read the patch, or turn the finding into a general note.
    - `unmapped` findings are kept and shown in a separate section; that is fine.
 

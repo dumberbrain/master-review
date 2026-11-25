@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { matchGlob, rulesFor } from '../../.claude/skills/review-diff/lib/languages.mjs';
-import { loadLanguages } from '../../.claude/skills/review-diff/lib/rules.mjs';
+import { loadRuleSet } from '../../.claude/skills/review-diff/lib/rules.mjs';
 
-const cfg = loadLanguages();
+const cfg = loadRuleSet();
+const GENERAL = ['refactoring-guru/general.md', 'owasp/general.md'];
 
 test('matchGlob: basename globs match in any folder', () => {
   assert.ok(matchGlob('*.min.js', 'dist/app.min.js'));
@@ -26,12 +27,21 @@ test('matchGlob is case-insensitive and accepts Windows separators', () => {
 test('rulesFor: .tsx gets general, TypeScript and React rules', () => {
   assert.deepEqual(rulesFor('src/App.tsx', cfg), {
     language: 'typescript',
-    ruleFiles: ['general.md', 'typescript.md', 'react.md'],
+    ruleFiles: [
+      'refactoring-guru/general.md',
+      'owasp/general.md',
+      'refactoring-guru/typescript.md',
+      'patterns-dev/typescript.md',
+      'bulletproof-react/typescript.md',
+      'patterns-dev/react.md',
+      'bulletproof-react/react.md',
+      'react-docs/react.md',
+    ],
   });
 });
 
 test('rulesFor: unknown extensions get general rules only; lock files are skipped', () => {
-  assert.deepEqual(rulesFor('docs/a.md', cfg), { language: null, ruleFiles: ['general.md'] });
+  assert.deepEqual(rulesFor('docs/a.md', cfg), { language: null, ruleFiles: GENERAL });
   assert.equal(rulesFor('yarn.lock', cfg).skipped.reason, 'generated-or-lockfile');
   assert.equal(rulesFor('api/v1/user.pb.go', cfg).skipped.reason, 'generated-or-lockfile');
 });

@@ -34,6 +34,7 @@ function checkOne(raw, files, rules) {
   }
   const rule = rules.byId.get(f.ruleId);
   if (!rule) return { error: `unknown ruleId ${f.ruleId}` };
+  if (!rule.packEnabled) return { error: `rule ${f.ruleId} belongs to the disabled pack "${rule.pack}"` };
   if (rule.status !== 'active') return { error: `rule ${f.ruleId} is retired` };
   f.severity = f.severity ?? rule.severity;
   if (!SEVERITIES.includes(f.severity)) return { error: `invalid severity ${f.severity}` };
@@ -48,9 +49,8 @@ function checkOne(raw, files, rules) {
   }
   if (file) {
     if (file.skipped) return { error: `path ${f.path} was skipped (${file.skipped.reason})` };
-    const allowed = file.ruleFiles.map((rf) => rules.prefixOfFile[rf]);
-    if (!allowed.includes(rule.prefix)) {
-      return { error: `rule ${f.ruleId} does not apply to ${f.path} (allowed: ${allowed.join(', ')})` };
+    if (!file.ruleFiles.includes(rule.file)) {
+      return { error: `rule ${f.ruleId} (${rule.file}) does not apply to ${f.path} (its rule files: ${file.ruleFiles.join(', ')})` };
     }
   }
 

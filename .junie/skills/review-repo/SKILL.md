@@ -36,11 +36,14 @@ the report itself, both in the current working directory.
 1. **Scan** — `HELPER scan --root "<REPO>" --out .review-repo/scan.json [--path <subfolder>] [--max-files 40]`
    (omit `--root` when `REPO` is the current working directory).
    Exit 1 with `not a directory`: the path is wrong — tell the user and stop.
+   Exit 1 naming a config or rule file: show the message and stop; the user must fix it.
+   Rule config: the helper uses `./review.config.json` from the current working directory
+   (never from `REPO`) when it exists; if the user names another one, add `--config "<file>"`.
    The JSON on stdout has: `totals`, `languages`, `skippedByReason`, `signals` (readme, CI,
    manifests and missing lockfiles, test counts, sensitive files, secret candidates, TODOs,
    large files, git hotspots, committed build artifacts, large binaries), `context` (docs,
-   manifests and config to read first) and `priority` (code files to review, most important
-   first, with their `ruleFiles`). Per-file data is in `scan.json` (`files[]`: `path`, `lines`,
+   manifests and config to read first), `priority` (code files to review, most important
+   first, with their `ruleFiles`) and `rules` (enabled `packs`, `files`, `overrides`). Per-file data is in `scan.json` (`files[]`: `path`, `lines`,
    `language`, `ruleFiles`, `skipped`).
    The review skills' own folders (`**/skills/review-repo/**`, `**/skills/review-diff/**`,
    `**/skills/review-change/**`) are skipped as "review tooling"; add `--include-tooling` only
@@ -53,11 +56,16 @@ the report itself, both in the current working directory.
    Work out what the project does, its main parts and layers, how it is built, tested,
    configured and deployed. Write this as a 3–6 sentence `overview` (plain Markdown).
 
-3. **Load rules** — read `<SKILL_ROOT>/rules/repo.md` and every rule file named in the
-   `ruleFiles` of the `priority` files, each once. Use only rules with `status: active`. The
-   language rules were written for diffs ("a changed function…"); apply them to existing code.
+3. **Load rules** — read each path in `rules.files` once (keys are rule file ids like
+   `repo/repo.md`, values are the paths to read): the `general` rule files plus those of the
+   `priority` files. A file may only cite rules from the ids in its own `ruleFiles`; a
+   repository-wide finding only rules from `general` files. Use only rules with
+   `status: active`, then apply `rules.overrides`: `status: retired` there means never cite the
+   rule, and `severity` there replaces its default. The language rules were written for diffs
+   ("a changed function…"); apply them to existing code.
 
-4. **Repository-level review** — go through the `REPO-*` rules using the scan signals.
+4. **Repository-level review** — go through the `REPO-*` rules using the scan signals (skip
+   this step when the `repo` pack is disabled).
    Verify every signal before reporting it: open the line of each secret candidate, check that a
    "missing lockfile" belongs to an application and not a library, check what CI really runs.
    **Never copy a secret value into a finding** — refer to the file and line and say what kind
@@ -71,7 +79,8 @@ the report itself, both in the current working directory.
      findings beat many weak ones.
    - Anchor it to the line numbers you saw when reading the file (`line`, optional `startLine`
      for a range). Never guess a line number.
-   - Cite exactly one `ruleId`: the most specific language rule, else `GEN-*`, else `REPO-*`.
+   - Cite exactly one `ruleId`: a language rule, else a `general` rule (`GEN-*` or a project
+     pack's), else `REPO-*`.
      Never invent rule ids. If no rule fits, do not report it.
    - Write `body` as 1–4 sentences of Markdown: what is wrong, why it matters (from the rule's
      `why`), what to do.

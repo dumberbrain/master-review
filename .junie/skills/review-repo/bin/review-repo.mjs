@@ -2,16 +2,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { CliError, EXIT } from '../lib/errors.mjs';
-import { REPO_RULE_FILE, validateRepoFindings } from '../lib/repo-findings.mjs';
+import { REPO_PACKS, validateRepoFindings } from '../lib/repo-findings.mjs';
 import { renderRepoReview } from '../lib/repo-render.mjs';
-import { loadLanguages, loadRules } from '../lib/rules.mjs';
+import { describeRuleSet, findProjectConfig, GENERAL, loadRuleSet, ruleSetSummary } from '../lib/rules.mjs';
 import { scanRepo } from '../lib/scan.mjs';
 
 const USAGE = `usage: review-repo.mjs <command> [args]
 
-  scan [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] --out <scan.json>
-  validate <scan.json> <findings.json> --out <review.json>
+  scan [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] [--config <file>] --out <scan.json>
+  validate <scan.json> <findings.json> --out <review.json> [--config <file>]
   render <review.json> --out <repo-review.md>
+  rules [--config <file>]
+
+--config: the rule config; default ./review.config.json (current working directory) when it exists.
 
 exit codes: 0 ok, 1 invalid input`;
 
@@ -51,6 +54,10 @@ function print(obj) {
   process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
 }
 
+function loadRepoRuleSet(projectConfig) {
+  return loadRuleSet({ projectConfig, extraPacks: REPO_PACKS });
+}
+
 const commands = {
   scan({ flags }) {
     const out = need(flags.out, '--out <scan.json>');
@@ -60,22 +67,35 @@ const commands = {
     const maxFiles = flags['max-files'] === undefined ? 40 : Number(flags['max-files']);
     if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new CliError('--max-files must be a positive integer', EXIT.INPUT);
 
-    const scan = scanRepo(root, loadLanguages(), {
-      scope: flags.path,
-      maxFiles,
-      useGit: !flags['no-git'],
-      includeTooling: Boolean(flags['include-tooling']),
-    });
+    const ruleSet = loadRepoRuleSet(findProjectConfig(flags.config));
+    const scan = {
+      ...scanRepo(root, ruleSet, {
+        scope: flags.path,
+        maxFiles,
+        useGit: !flags['no-git'],
+        includeTooling: Boolean(flags['include-tooling']),
+      }),
+      ruleConfig: ruleSet.projectConfig,
+    };
     writeFile(out, JSON.stringify(scan, null, 2));
     const { files, ...summary } = scan;
-    print(summary);
+    // Rule files to load: every general one (repository-wide findings) plus the priority files' ones.
+    const general = ruleSet.files.filter((f) => f.enabled && f.language === GENERAL).map((f) => f.id);
+    print({ ...summary, rules: ruleSetSummary(ruleSet, [...general, ...scan.priority.flatMap((p) => p.ruleFiles)]) });
+  },
+
+  rules({ flags }) {
+    const d = describeRuleSet(loadRepoRuleSet(findProjectConfig(flags.config)));
+    print(d);
+    if (d.problems.length) process.exitCode = EXIT.INPUT;
   },
 
   validate({ positional, flags }) {
     const scan = readJson(need(positional[0], '<scan.json>'));
     const input = readJson(need(positional[1], '<findings.json>'));
     const out = need(flags.out, '--out <review.json>');
-    const rules = loadRules(undefined, { extra: [REPO_RULE_FILE] });
+    // The config recorded at scan time, so scan and validate see the same rules.
+    const rules = loadRepoRuleSet(flags.config ? findProjectConfig(flags.config) : (scan.ruleConfig ?? null));
     const { invalid, report } = validateRepoFindings(scan, input, rules);
     print({ findings: report.findings.length, bySeverity: report.summary.bySeverity, reviewed: report.reviewed.length, invalid });
     if (invalid.length) {

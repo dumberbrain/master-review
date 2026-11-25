@@ -19,6 +19,9 @@ test('scan --root reviews another folder; validate and render write here with li
   assert.equal(scan.status, 0, scan.stderr);
   assert.equal(scan.json.root, path.resolve(target));
   assert.ok(scan.json.priority.some((f) => f.path === 'src/index.js'));
+  assert.equal(scan.json.rules.config, null, 'no review.config.json in the working directory');
+  assert.ok(scan.json.rules.packs.includes('repo'));
+  assert.equal(scan.json.rules.files['repo/repo.md'], path.join(REPO_SKILL, 'rules', 'packs', 'repo', 'repo.md'));
 
   fs.writeFileSync(
     path.join(here, '.review-repo', 'findings.json'),
@@ -47,4 +50,23 @@ test('scan --root with a path that does not exist exits 1', (t) => {
   const r = runNode(CLI, ['scan', '--root', path.join(here, 'nope'), '--out', 'scan.json'], { cwd: here });
   assert.equal(r.status, 1);
   assert.match(r.stderr, /not a directory/);
+});
+
+test('review.config.json in the working directory can switch the repo pack off', (t) => {
+  const target = fixtureRepo(t);
+  const here = tempDir(t);
+  fs.writeFileSync(path.join(here, 'review.config.json'), JSON.stringify({ packs: { repo: { enabled: false } } }));
+  const run = (args) => runNode(CLI, args, { cwd: here });
+
+  const rules = run(['rules']);
+  assert.equal(rules.status, 0, rules.stderr);
+  assert.equal(rules.json.packs.find((p) => p.name === 'repo').enabled, false);
+
+  const scan = run(['scan', '--root', target, '--no-git', '--out', 'scan.json']);
+  assert.equal(scan.status, 0, scan.stderr);
+  assert.deepEqual(scan.json.rules.disabledPacks, ['repo']);
+  fs.writeFileSync(path.join(here, 'findings.json'), JSON.stringify([{ general: true, ruleId: 'REPO-003', title: 'No CI', body: 'b' }]));
+  const validate = run(['validate', 'scan.json', 'findings.json', '--out', 'review.json']);
+  assert.equal(validate.status, 1);
+  assert.match(validate.json.invalid[0].error, /disabled pack "repo"/);
 });

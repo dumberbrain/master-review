@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateFindings } from '../../.claude/skills/review-diff/lib/findings.mjs';
 import { buildMr, parseGitDiff } from '../../.claude/skills/review-diff/lib/merge-request.mjs';
-import { loadLanguages, loadRules } from '../../.claude/skills/review-diff/lib/rules.mjs';
+import { loadRuleSet } from '../../.claude/skills/review-diff/lib/rules.mjs';
 import { lines } from '../helpers.mjs';
 
 const diff = lines(
@@ -22,8 +22,8 @@ const diff = lines(
   '-old',
   '+new',
 );
-const mr = buildMr({ platform: 'github', files: parseGitDiff(diff) }, loadLanguages());
-const rules = loadRules();
+const rules = loadRuleSet();
+const mr = buildMr({ platform: 'github', files: parseGitDiff(diff) }, rules);
 const base = { title: 'Loose equality', body: 'Use `===`.' };
 
 function check(findings) {

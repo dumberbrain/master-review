@@ -44,21 +44,28 @@ The validation step catches those errors before they reach the report.
 
 ## Rules
 
-Findings must cite a rule from `rules/`. A finding without a matching rule is not reported.
-This keeps reviews focused and explainable: each comment carries the rule's *why* and *fix*.
+Findings must cite a rule from an enabled rule pack. A finding without a matching rule is not
+reported. This keeps reviews focused and explainable: each comment carries the rule's *why* and
+*fix*.
 
-| File | Prefix | Applies to |
-|-|-|-|
-| `general.md` | `GEN` | every file |
-| `csharp.md` | `CS` | `.cs` |
-| `go.md` | `GO` | `.go` |
-| `java.md` | `JAVA` | `.java` |
-| `javascript.md` | `JS` | `.js .mjs .cjs .jsx` |
-| `typescript.md` | `TS` | `.ts .mts .cts .tsx` |
-| `react.md` | `REACT` | `.jsx .tsx` |
-| `repo.md` (review-repo only) | `REPO` | repository-level problems, any file |
+Rules are grouped into **packs**, one per resource: `refactoring-guru`, `owasp`,
+`dotnet-practices`, `go-review-comments`, `patterns-dev`, `bulletproof-react`, `react-docs`,
+and `repo` (review-repo only). Each pack has one rule file per language it covers. A file gets
+the `general` files plus the files of its language(s).
 
-The rule files are plain Markdown and meant to be edited by your team. See [rules.md](rules.md).
+| Prefix | Applies to |
+|-|-|
+| `GEN` | every file |
+| `CS` | `.cs` |
+| `GO` | `.go` |
+| `JAVA` | `.java` |
+| `JS` | `.js .mjs .cjs .jsx` |
+| `TS` | `.ts .mts .cts .tsx` |
+| `REACT` | `.jsx .tsx` |
+| `REPO` (review-repo only) | repository-level problems, any file |
+
+In a `review.config.json` a team chooses its packs, adds its own guidelines as a pack, and
+changes or retires single rules, without editing the skills. See [rules.md](rules.md).
 
 Severities, from most to least serious:
 

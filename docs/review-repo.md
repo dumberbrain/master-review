@@ -63,7 +63,8 @@ disk, [`review-change`](review-change.md) instead.
 2. **Understand the project.** The agent reads the `context` files: README and other top-level
    docs, manifests, CI, Docker and config. It then writes a short overview of the project's
    purpose, structure, build, tests and deployment.
-3. **Load rules.** The agent reads `repo.md` and the language rule files of the priority files.
+3. **Load rules.** The agent reads the `general` rule files of the enabled packs (including
+   `repo/repo.md`) and the language rule files of the priority files.
 4. **Repository-level review.** The agent checks every `REPO-*` rule against the scan signals.
    It verifies each signal before reporting it. For example, it opens the line of a secret
    candidate, and it checks that a missing lockfile belongs to an application and not a
@@ -161,9 +162,13 @@ input.
 
 | Command | Purpose |
 |-|-|
-| `scan --out <scan.json> [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling]` | inventory + signals + priority. stdout omits the per-file list; `scan.json` has it |
-| `validate <scan.json> <findings.json> --out <review.json>` | check findings and capture snippets; writes nothing if any finding is invalid |
+| `scan --out <scan.json> [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] [--config <file>]` | inventory + signals + priority + rule set. stdout omits the per-file list; `scan.json` has it |
+| `validate <scan.json> <findings.json> --out <review.json> [--config <file>]` | check findings and capture snippets; writes nothing if any finding is invalid. Uses the config recorded by `scan` unless `--config` is given |
 | `render <review.json> --out <repo-review.md>` | write the report; links are relative to the output file |
+| `rules [--config <file>]` | print the effective rule config, including the `repo` pack, and lint problems; exit 1 on problems |
+
+`--config` defaults to `./review.config.json` in the current working directory, never in the
+reviewed repository. See [rules.md](rules.md#project-config-reviewconfigjson).
 
 `--no-git` forces a folder walk. `--include-tooling` also scans the review skills' own folders.
 You only need it when reviewing this repository.

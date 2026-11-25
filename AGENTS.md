@@ -24,7 +24,8 @@ helper does everything deterministic (parsing, line anchoring, validation, rende
 
 - **Edit skills only under `.claude/skills/`.** `.agents/skills/` and `.junie/skills/` are
   generated mirrors; never edit them by hand.
-- **Edit shared files only in `review-diff`:** `rules/*` (except `review-repo/rules/repo.md`),
+- **Edit shared files only in `review-diff`:** `rules/config.json` and `rules/packs/*` (except
+  `review-repo/rules/packs/repo/`),
   `lib/errors.mjs`, `lib/languages.mjs`, `lib/rules.mjs`. `review-repo` receives a copy.
   `review-change` receives `bin/review.mjs`, `rules/*` and every `lib/*.mjs` except its own
   `lib/project.mjs` (the full list is `SHARED` in `scripts/sync-skills.mjs`).
@@ -51,8 +52,9 @@ helper does everything deterministic (parsing, line anchoring, validation, rende
   input). Keep that contract; `SKILL.md` relies on it.
 - Every change to a helper needs a test under `test/`. Fixtures that look like secrets must be
   assembled at runtime (see `test/review-repo/fixture.mjs`), never written literally.
-- Rule files follow the format in [docs/rules.md](docs/rules.md); `test/rules.test.mjs` lints
-  them.
+- Rules are grouped into packs (one folder per resource under `rules/packs/`, registered in
+  `rules/config.json`). Rule files follow the format in [docs/rules.md](docs/rules.md);
+  `test/rules.test.mjs` lints them. Never renumber rule ids.
 
 ## SKILL.md rules (portability)
 

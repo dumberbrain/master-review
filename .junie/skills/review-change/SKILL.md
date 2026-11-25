@@ -43,8 +43,11 @@ and the report, both in the current working directory.
 1. **Parse** — `HELPER parse "<DIFF>" --out .review-change/mr.json --platform <github|gitlab> --title "<short title>"`
    - Exit 1: not a git diff (needs `diff --git a/... b/...` headers). Show the message, ask
      for the full `.diff` output, write no report, and stop.
-   - The JSON lists `reviewable` files with their `ruleFiles` and commentable `lines`, and
-     `skippedFiles` with reasons.
+   - Rule config: the helper uses `./review.config.json` (current working directory) when it
+     exists. If the user names another config file, add `--config "<file>"`.
+   - Exit 1 naming a config or rule file: show the message and stop; the user must fix it.
+   - The JSON lists `reviewable` files with their `ruleFiles` and commentable `lines`,
+     `skippedFiles` with reasons, and `rules` (enabled `packs`, `files`, `overrides`).
 
 2. **Project context** — `CONTEXT .review-change/mr.json --project "<PROJECT>" --out .review-change/project.json`
    The JSON has `structure` (folders with file counts), `context` (README, CI, config and
@@ -64,9 +67,11 @@ and the report, both in the current working directory.
    data access, UI, config, tests). Read `AGENTS.md`, `CLAUDE.md` or `CONTRIBUTING.md` when
    present: they state the project's own conventions.
 
-4. **Load rules** — for the set of all `ruleFiles` across reviewable files, read each one from
-   `<SKILL_ROOT>/rules/` once. Use only rules with `status: active`. A `.tsx`/`.jsx` file gets
-   general + TypeScript/JavaScript + React rules, as listed in its `ruleFiles`.
+4. **Load rules** — read each path in `rules.files` once (keys are rule file ids like
+   `owasp/general.md`, values are the paths to read). Each reviewable file may only cite rules
+   from the ids in its own `ruleFiles`. Use only rules with `status: active`, then apply
+   `rules.overrides` on top of the files: `status: retired` there means never cite the rule,
+   and `severity` there replaces the rule's default.
 
 5. **Review with the project** — for each reviewable file, in batches of about 10: read its
    patch in `.review-change/mr.json` (`files[].patch`), then the full file from `PROJECT`
@@ -82,8 +87,8 @@ and the report, both in the current working directory.
    - **Existing helpers** — Grep for code that already does what the new code does
      (duplication, `GEN-004`), and for the project's own wrappers the new code bypasses.
    - **Security** — follow the input from the changed handler to where it is used, and check
-     the authorization and validation the rest of the project applies (see the Security
-     section of `general.md`).
+     the authorization and validation the rest of the project applies (see the security
+     rules in `owasp/general.md`).
 
    For each issue:
    - Report only problems **introduced or made worse by this diff**. Old problems in unchanged
@@ -93,8 +98,8 @@ and the report, both in the current working directory.
      test) is anchored to the changed line that causes it; name the affected `path:line` in
      the body. If there is no commentable line for it, make it a general note
      (`"general": true`).
-   - Cite exactly one `ruleId`. Prefer the most specific language rule; use `GEN-*` only when
-     no language rule fits. Never invent rule ids. If no rule fits at all, do not report it.
+   - Cite exactly one `ruleId`. Prefer a rule from a language rule file; use a rule from a
+     `general` file (e.g. `GEN-*`) only when no language rule fits. Never invent rule ids. If no rule fits at all, do not report it.
    - Write `body` as a short, friendly review comment in Markdown: what is wrong, why it
      matters (from the rule's `why`), what to do. 1–4 sentences. When the evidence is in
      another file, say where ("`OrderController.cs:88` still passes the old `customerId`").

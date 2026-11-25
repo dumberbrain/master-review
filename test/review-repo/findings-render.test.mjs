@@ -2,20 +2,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { REPO_RULE_FILE, validateRepoFindings } from '../../.claude/skills/review-repo/lib/repo-findings.mjs';
+import { REPO_PACKS, validateRepoFindings } from '../../.claude/skills/review-repo/lib/repo-findings.mjs';
 import { renderRepoReview } from '../../.claude/skills/review-repo/lib/repo-render.mjs';
-import { loadLanguages, loadRules } from '../../.claude/skills/review-repo/lib/rules.mjs';
+import { loadRuleSet } from '../../.claude/skills/review-repo/lib/rules.mjs';
 import { scanRepo } from '../../.claude/skills/review-repo/lib/scan.mjs';
 import { REPO_SKILL, runNode } from '../helpers.mjs';
 import { fixtureRepo } from './fixture.mjs';
 
-const rules = loadRules(path.join(REPO_SKILL, 'rules'), { extra: [REPO_RULE_FILE] });
+const rules = loadRuleSet({ rulesDir: path.join(REPO_SKILL, 'rules'), extraPacks: REPO_PACKS });
 const NOW = { now: new Date('2026-01-01T00:00:00Z') };
 const loose = { path: 'src/index.js', line: 4, ruleId: 'JS-001', title: 'Loose equality', body: 'Use `===`.' };
 
 function setup(t) {
   const root = fixtureRepo(t);
-  return { root, scan: scanRepo(root, loadLanguages(), { useGit: false }) };
+  return { root, scan: scanRepo(root, rules, { useGit: false }) };
 }
 
 test('valid findings get rule severity, a code snippet and summary counts', (t) => {
@@ -46,7 +46,7 @@ test('valid findings get rule severity, a code snippet and summary counts', (t) 
   assert.equal(f.snippet, 'if (a == b) start();');
   assert.deepEqual(report.reviewed, ['src/index.js', 'src/util.js'], 'finding files count as reviewed');
   assert.equal(report.summary.filesReviewed, 2);
-  assert.equal(report.summary.byRuleFile['repo.md'], 2);
+  assert.equal(report.summary.byRuleFile['repo/repo.md'], 2);
 });
 
 test('invalid findings: unknown path/rule, wrong language, line past EOF, skipped file, duplicates', (t) => {

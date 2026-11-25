@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildMr, parseGitDiff, readQuoted } from '../../.claude/skills/review-diff/lib/merge-request.mjs';
-import { loadLanguages } from '../../.claude/skills/review-diff/lib/rules.mjs';
+import { loadRuleSet } from '../../.claude/skills/review-diff/lib/rules.mjs';
+
+const GENERAL = ['refactoring-guru/general.md', 'owasp/general.md'];
+const JS_FILES = [...GENERAL, 'refactoring-guru/javascript.md', 'patterns-dev/javascript.md', 'bulletproof-react/javascript.md'];
+const TS_FILES = [...GENERAL, 'refactoring-guru/typescript.md', 'patterns-dev/typescript.md', 'bulletproof-react/typescript.md'];
+const CS_FILES = [...GENERAL, 'refactoring-guru/csharp.md', 'dotnet-practices/csharp.md'];
 import { lines } from '../helpers.mjs';
 
 const SAMPLE_DIFF = lines(
@@ -72,12 +77,12 @@ test('parseGitDiff accepts CRLF input', () => {
 });
 
 test('buildMr attaches rule files and skips deleted, binary and lock files', () => {
-  const mr = buildMr({ platform: 'github', files: parseGitDiff(SAMPLE_DIFF) }, loadLanguages());
+  const mr = buildMr({ platform: 'github', files: parseGitDiff(SAMPLE_DIFF) }, loadRuleSet());
   const byPath = Object.fromEntries(mr.files.map((f) => [f.path, f]));
-  assert.deepEqual(byPath['src/a.js'].ruleFiles, ['general.md', 'javascript.md']);
+  assert.deepEqual(byPath['src/a.js'].ruleFiles, JS_FILES);
   assert.deepEqual(byPath['src/a.js'].validLines, [1, 2]);
-  assert.deepEqual(byPath['new.ts'].ruleFiles, ['general.md', 'typescript.md']);
-  assert.deepEqual(byPath['to.cs'].ruleFiles, ['general.md', 'csharp.md']);
+  assert.deepEqual(byPath['new.ts'].ruleFiles, TS_FILES);
+  assert.deepEqual(byPath['to.cs'].ruleFiles, CS_FILES);
   assert.equal(byPath['old.go'].skipped.reason, 'deleted');
   assert.match(byPath['logo.png'].skipped.reason, /no-patch/);
   assert.equal(byPath['yarn.lock'].skipped.reason, 'generated-or-lockfile');

@@ -60,12 +60,14 @@ Say **"GitLab"** when the diff comes from a GitLab MR. The platform changes two 
 1. **Parse.** The helper splits the diff into files. It skips the following, with a reason:
    - deleted files;
    - binaries and files without a patch;
-   - lock files, minified files and generated files (see `skip` in `rules/languages.json`).
+   - lock files, minified files and generated files (see `skip` in `rules/config.json` and your `review.config.json`).
 
-   For every other file it lists the rule files that apply and the **commentable lines**:
+   For every other file it lists the rule files of the enabled [packs](rules.md#packs) that
+   apply and the **commentable lines**:
    new-side lines that were added or shown as context. Only these lines can carry a comment in
    GitHub or GitLab.
-2. **Load rules.** The agent reads the rule files the parse step listed, each once.
+2. **Load rules.** The agent reads the rule files the parse step listed, each once, and applies
+   the severity and status overrides from `review.config.json`.
 3. **Review.** The agent reads the patches. For each problem introduced or touched by the diff,
    it records a finding. A finding has a file and line, exactly one rule id, a short comment
    and, where possible, a drop-in code suggestion. Problems in untouched code are not
@@ -151,10 +153,14 @@ is installed). Output is JSON on stdout. Exit code 0 means success, 1 means inva
 
 | Command | Purpose |
 |-|-|
-| `parse <file.diff> --out <mr.json> [--platform github\|gitlab] [--title <text>]` | split the diff, attach rule files and commentable lines; prints the reviewable and skipped files |
+| `parse <file.diff> --out <mr.json> [--platform github\|gitlab] [--title <text>] [--config <file>]` | split the diff, attach rule files and commentable lines; prints the reviewable and skipped files and the rule set (`rules`) |
 | `lines <mr.json> [path]` | print the commentable line ranges and hunks of one or all files |
-| `validate <mr.json> <findings.json> --out <review.json>` | check findings; prints the counts and an `invalid` list; writes nothing if any finding is invalid |
+| `validate <mr.json> <findings.json> --out <review.json> [--config <file>]` | check findings; prints the counts and an `invalid` list; writes nothing if any finding is invalid. Uses the config recorded by `parse` unless `--config` is given |
 | `render <review.json> --out <review.md>` | write the Markdown report |
+| `rules [--config <file>]` | print the effective rule config (packs, languages, skip, overrides) and lint problems; exit 1 on problems. See [rules.md](rules.md#checking-a-config-the-rules-command) |
+
+`--config` defaults to `./review.config.json` when that file exists. See
+[rules.md](rules.md#project-config-reviewconfigjson).
 
 Findings file (`findings.json`): a JSON array.
 

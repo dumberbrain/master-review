@@ -1,18 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { loadLanguages } from '../../.claude/skills/review-repo/lib/rules.mjs';
+import { loadRuleSet } from '../../.claude/skills/review-repo/lib/rules.mjs';
+import { REPO_PACKS } from '../../.claude/skills/review-repo/lib/repo-findings.mjs';
 import { findSecrets, redact, scanRepo } from '../../.claude/skills/review-repo/lib/scan.mjs';
 import { FAKE_AWS, FAKE_PASSWORD, fixtureRepo } from './fixture.mjs';
 
+const RULES = loadRuleSet({ extraPacks: REPO_PACKS });
+const GENERAL = ['refactoring-guru/general.md', 'owasp/general.md', 'repo/repo.md'];
+
 test('scan builds an inventory with languages, rule files and skip reasons', (t) => {
-  const scan = scanRepo(fixtureRepo(t), loadLanguages(), { useGit: false, maxFiles: 3 });
+  const scan = scanRepo(fixtureRepo(t), RULES, { useGit: false, maxFiles: 3 });
   const byPath = Object.fromEntries(scan.files.map((f) => [f.path, f]));
 
   assert.equal(scan.fileSource, 'walk');
   assert.equal(scan.git, null);
-  assert.deepEqual(byPath['src/index.js'].ruleFiles, ['general.md', 'javascript.md']);
+  assert.deepEqual(byPath['src/index.js'].ruleFiles, [...GENERAL, 'refactoring-guru/javascript.md', 'patterns-dev/javascript.md', 'bulletproof-react/javascript.md']);
   assert.equal(byPath['src/index.js'].lines, 4);
-  assert.deepEqual(byPath['src/App.tsx'].ruleFiles, ['general.md', 'typescript.md', 'react.md']);
+  assert.deepEqual(byPath['src/App.tsx'].ruleFiles, [
+    ...GENERAL,
+    'refactoring-guru/typescript.md',
+    'patterns-dev/typescript.md',
+    'bulletproof-react/typescript.md',
+    'patterns-dev/react.md',
+    'bulletproof-react/react.md',
+    'react-docs/react.md',
+  ]);
   assert.equal(byPath['logo.png'].skipped.reason, 'binary');
   assert.equal(byPath['.claude/skills/review-repo/SKILL.md'].skipped.reason, 'review tooling');
   assert.equal(byPath['repo-review.md'].skipped.reason, 'review output');
@@ -21,7 +33,7 @@ test('scan builds an inventory with languages, rule files and skip reasons', (t)
 });
 
 test('scan signals: manifests, lockfiles, tests, CI, sensitive files, secrets, TODOs', (t) => {
-  const { signals } = scanRepo(fixtureRepo(t), loadLanguages(), { useGit: false });
+  const { signals } = scanRepo(fixtureRepo(t), RULES, { useGit: false });
 
   assert.equal(signals.readme, null);
   assert.equal(signals.gitignore, false);
@@ -42,14 +54,14 @@ test('scan signals: manifests, lockfiles, tests, CI, sensitive files, secrets, T
 });
 
 test('scan never puts a secret value into its output', (t) => {
-  const scan = scanRepo(fixtureRepo(t), loadLanguages(), { useGit: false });
+  const scan = scanRepo(fixtureRepo(t), RULES, { useGit: false });
   const json = JSON.stringify(scan);
   assert.ok(!json.includes(FAKE_PASSWORD));
   assert.ok(!json.includes(FAKE_AWS));
 });
 
 test('scan priority puts entrypoints first and limits to maxFiles; context lists manifests', (t) => {
-  const scan = scanRepo(fixtureRepo(t), loadLanguages(), { useGit: false, maxFiles: 2 });
+  const scan = scanRepo(fixtureRepo(t), RULES, { useGit: false, maxFiles: 2 });
   assert.equal(scan.priority.length, 2);
   assert.equal(scan.priority[0].path, 'src/index.js');
   assert.deepEqual(scan.priority[0].reasons, ['entrypoint']);
@@ -57,7 +69,7 @@ test('scan priority puts entrypoints first and limits to maxFiles; context lists
 });
 
 test('scan --path limits the inventory to a sub-folder', (t) => {
-  const scan = scanRepo(fixtureRepo(t), loadLanguages(), { useGit: false, scope: './src/' });
+  const scan = scanRepo(fixtureRepo(t), RULES, { useGit: false, scope: './src/' });
   assert.equal(scan.scope, 'src');
   assert.ok(scan.files.every((f) => f.path.startsWith('src/')));
   assert.equal(scan.totals.files, 4);

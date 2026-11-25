@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "languages": {
+    "csharp": { "extensions": [".cs"] },
+    "go": { "extensions": [".go"] },
+    "java": { "extensions": [".java"] },
+    "typescript": { "extensions": [".ts", ".mts", ".cts", ".tsx"] },
+    "javascript": { "extensions": [".js", ".mjs", ".cjs", ".jsx"] },
+    "react": { "extensions": [".jsx", ".tsx"] }
+  },
+  "packs": {
+    "refactoring-guru": {
+      "title": "Refactoring.Guru and SourceMaking: code smells, refactorings, design patterns, anti-patterns",
+      "url": "https://refactoring.guru",
+      "enabled": true
+    },
+    "owasp": {
+      "title": "OWASP Cheat Sheets and CWE: security",
+      "url": "https://cheatsheetseries.owasp.org",
+      "enabled": true
+    },
+    "dotnet-practices": {
+      "title": ".NET practices: MCP Market .NET C# expert skill, D. Gallivan's C# code smells",
+      "url": "https://mcpmarket.com/tools/skills/net-c-development-expert",
+      "enabled": true
+    },
+    "go-review-comments": {
+      "title": "Go Code Review Comments",
+      "url": "https://go.dev/wiki/CodeReviewComments",
+      "enabled": true
+    },
+    "patterns-dev": {
+      "title": "patterns.dev: JavaScript and React patterns",
+      "url": "https://www.patterns.dev",
+      "enabled": true
+    },
+    "bulletproof-react": {
+      "title": "Bulletproof React: architecture, state, security",
+      "url": "https://github.com/alan2207/bulletproof-react",
+      "enabled": true
+    },
+    "react-docs": {
+      "title": "React documentation: You Might Not Need an Effect",
+      "url": "https://react.dev/learn/you-might-not-need-an-effect",
+      "enabled": true
+    }
+  },
+  "skip": [
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "go.sum",
+    "*.min.js",
+    "*.min.css",
+    "*.map",
+    "dist/**",
+    "build/**",
+    "bin/Debug/**",
+    "bin/Release/**",
+    "obj/**",
+    "vendor/**",
+    "node_modules/**",
+    "*.g.cs",
+    "*.Designer.cs",
+    "*.generated.*",
+    "*.pb.go"
+  ]
+}

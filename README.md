@@ -73,7 +73,7 @@ or *"…on `../shop-api`"*. Open the report.
 | [docs/review-change.md](docs/review-change.md) | reviewing a diff with its project, head vs base checkout, context helper, troubleshooting |
 | [docs/review-repo.md](docs/review-repo.md) | what is scanned, which files are read, reading `repo-review.md`, secrets, large repos, CLI reference, troubleshooting |
 | [docs/agents.md](docs/agents.md) | supported agents and their folders, installing, running in each agent, **rules for portable skills** |
-| [docs/rules.md](docs/rules.md) | rule file format; editing, adding and retiring rules; adding a language; skipping files |
+| [docs/rules.md](docs/rules.md) | rule packs per resource; `review.config.json` (packs on/off, your own pack, rule overrides); rule file format; adding rules, packs and languages |
 | [docs/development.md](docs/development.md) | repository layout, the single-source rule, tests, changing or adding a skill |
 | [AGENTS.md](AGENTS.md) | instructions for AI agents working on this repository |
 
@@ -92,11 +92,24 @@ Details: [docs/overview.md](docs/overview.md#how-it-works).
 
 ## Rules
 
-Rules are Markdown files that your team can edit:
+Rules are Markdown files grouped into **packs**, one per resource: Refactoring.Guru, OWASP,
+.NET practices, Go Code Review Comments, patterns.dev, Bulletproof React, the React docs, and
+repository-level rules (`REPO`, review-repo only). Rule ids keep their language prefixes:
+`GEN`, `CS`, `GO`, `JAVA`, `JS`, `TS`, `REACT`.
 
-- general rules (`GEN`);
-- C# (`CS`), Go (`GO`), Java (`JAVA`), JavaScript (`JS`), TypeScript (`TS`), React (`REACT`);
-- repository-level rules (`REPO`).
+A `review.config.json` in your repository turns packs on or off, adds your team's own
+guidelines as a pack, and changes the severity of single rules or retires them, without
+editing the skills:
+
+```json
+{
+  "packs": {
+    "patterns-dev": { "enabled": false },
+    "acme": { "title": "ACME guidelines", "dir": "review-rules/acme" }
+  },
+  "rules": { "GEN-006": { "status": "retired" }, "CS-004": { "severity": "blocker" } }
+}
+```
 
 Every finding cites exactly one rule. See [docs/rules.md](docs/rules.md).
 

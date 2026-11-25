@@ -5,14 +5,17 @@ import { CliError, EXIT } from '../lib/errors.mjs';
 import { validateFindings } from '../lib/findings.mjs';
 import { buildMr, loadLocalDiff } from '../lib/merge-request.mjs';
 import { renderReview } from '../lib/render.mjs';
-import { loadLanguages, loadRules } from '../lib/rules.mjs';
+import { describeRuleSet, findProjectConfig, loadRuleSet, ruleSetSummary } from '../lib/rules.mjs';
 
 const USAGE = `usage: review.mjs <command> [args]
 
-  parse <file.diff> --out <mr.json> [--platform github|gitlab] [--title <text>]
+  parse <file.diff> --out <mr.json> [--platform github|gitlab] [--title <text>] [--config <file>]
   lines <mr.json> [path]
-  validate <mr.json> <findings.json> --out <review.json>
+  validate <mr.json> <findings.json> --out <review.json> [--config <file>]
   render <review.json> --out <review.md>
+  rules [--config <file>]
+
+--config: the project's rule config; default ./review.config.json when it exists.
 
 exit codes: 0 ok, 1 invalid input`;
 
@@ -72,7 +75,8 @@ const commands = {
     if (raw.files.length === 0) {
       throw new CliError(`${diffPath} is not a unified git diff (no "diff --git a/... b/..." headers found)`, EXIT.INPUT);
     }
-    const mr = buildMr(raw, loadLanguages());
+    const ruleSet = loadRuleSet({ projectConfig: findProjectConfig(flags.config) });
+    const mr = { ...buildMr(raw, ruleSet), ruleConfig: ruleSet.projectConfig };
     writeFile(out, JSON.stringify(mr, null, 2));
     const reviewable = mr.files.filter((f) => !f.skipped);
     print({
@@ -80,6 +84,7 @@ const commands = {
       title: mr.title,
       files: mr.files.length,
       skipped: mr.files.length - reviewable.length,
+      rules: ruleSetSummary(ruleSet, reviewable.flatMap((f) => f.ruleFiles)),
       reviewable: reviewable.map((f) => ({ path: f.path, ruleFiles: f.ruleFiles, lines: ranges(f.validLines) })),
       skippedFiles: mr.files.filter((f) => f.skipped).map((f) => ({ path: f.path, reason: f.skipped.reason })),
     });
@@ -101,7 +106,9 @@ const commands = {
     const mr = readJson(need(positional[0], '<mr.json>'));
     const findings = readJson(need(positional[1], '<findings.json>'));
     const out = need(flags.out, '--out <review.json>');
-    const { invalid, report } = validateFindings(mr, findings, loadRules(), { mode: 'file' });
+    // The config recorded at parse time, so parse and validate see the same rules.
+    const projectConfig = flags.config ? findProjectConfig(flags.config) : (mr.ruleConfig ?? null);
+    const { invalid, report } = validateFindings(mr, findings, loadRuleSet({ projectConfig }), { mode: 'file' });
     const counts = {
       pending: report.findings.filter((f) => f.status === 'pending' && !f.general).length,
       general: report.findings.filter((f) => f.general).length,
@@ -114,6 +121,12 @@ const commands = {
       return;
     }
     writeFile(out, JSON.stringify(report, null, 2));
+  },
+
+  rules({ flags }) {
+    const d = describeRuleSet(loadRuleSet({ projectConfig: findProjectConfig(flags.config) }));
+    print(d);
+    if (d.problems.length) process.exitCode = EXIT.INPUT;
   },
 
   render({ positional, flags }) {
