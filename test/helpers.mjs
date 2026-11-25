@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DIFF_SKILL = path.join(ROOT, '.claude', 'skills', 'review-diff');
 export const REPO_SKILL = path.join(ROOT, '.claude', 'skills', 'review-repo');
+export const CHANGE_SKILL = path.join(ROOT, '.claude', 'skills', 'review-change');
 
 export function tempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'master-review-test-'));

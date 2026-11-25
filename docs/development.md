@@ -11,7 +11,13 @@ How this repository is organized and how to change it safely. The same rules are
     SKILL.md                 steps the agent follows
     bin/review.mjs           helper CLI: parse, lines, validate, render
     lib/                     diff parsing, findings validation, rendering, rules, languages
-    rules/                   rule files + languages.json (shared with review-repo)
+    rules/                   rule files + languages.json (shared with review-repo and review-change)
+  review-change/
+    SKILL.md
+    bin/review.mjs           ← copied from review-diff
+    bin/context.mjs          helper CLI: project context for a parsed diff (own)
+    lib/project.mjs          structure, context files, tests, head/base checkout (own)
+    lib/*, rules/*           ← copied from review-diff
   review-repo/
     SKILL.md
     bin/review-repo.mjs      helper CLI: scan, validate, render
@@ -45,7 +51,7 @@ folder must be self-contained. Only one place is edited:
 `npm run sync` does two things:
 
 - it copies the shared paths listed in `SHARED` in `scripts/sync-skills.mjs` from
-  `review-diff` to `review-repo`;
+  `review-diff` to `review-repo` and `review-change`;
 - it mirrors every `.claude/skills/<skill>/` exactly into `.agents/skills/` and
   `.junie/skills/`.
 
@@ -61,7 +67,8 @@ npm test        # Node.js >= 22 for the test runner; the skills themselves need 
 | Suite | Covers |
 |-|-|
 | `test/review-diff/*` | diff parsing (including quoted non-ASCII paths), globs, findings validation, rendering, CLI end-to-end |
-| `test/review-repo/*` | scanner (inventory, signals, secret redaction, scope), findings validation, report, CLI end-to-end |
+| `test/review-change/*` | project context: head/base/differs/missing checkout, structure, context files, matching tests, CLI errors |
+| `test/review-repo/*` | scanner (inventory, signals, secret redaction, scope), findings validation, report, CLI end-to-end, reviewing another folder with `--root` |
 | `test/rules.test.mjs` | lints all rule files |
 | `test/skills.test.mjs` | `SKILL.md` portability (name, description, `$ARGUMENTS` note, imports) |
 | `test/sync.test.mjs` | sync behaviour and that the repository is in sync |
@@ -101,4 +108,5 @@ message, because they change review results.
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat(review-repo): …`,
 `fix(review-diff): …`, `docs: …`, `test: …`, `chore: …`. Do not commit review outputs
-(`review.md`, `repo-review.md`, `.review-comment/`, `.review-repo/`); they are in `.gitignore`.
+(`review.md`, `repo-review*.md`, `.review-comment/`, `.review-change/`, `.review-repo/`); they are
+in `.gitignore`.

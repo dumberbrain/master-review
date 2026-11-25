@@ -10,9 +10,10 @@ Markdown file you can read, edit and share.
 | Situation | Skill | You get |
 |-|-|-|
 | A pull request / merge request needs review, and you want draft comments to paste into GitHub or GitLab | [`review-diff`](review-diff.md) | `review.md`: one ready-to-paste comment per finding, with the exact line to click, severity, rule and (where possible) a one-click suggestion |
-| You join a project, take over a service, or want a health check of a codebase | [`review-repo`](review-repo.md) | `repo-review.md`: project overview, repository-level problems (secrets, tests, CI, dependencies, structure), prioritized file/line findings, and what was and was not covered |
+| The same, but the project is on your disk and the change touches shared code | [`review-change`](review-change.md) | `review.md` like review-diff; the agent also checks callers, tests and conventions in the rest of the project |
+| You join a project, take over a service, or want a health check of a codebase (this repository or another one by path) | [`review-repo`](review-repo.md) | `repo-review.md`: project overview, repository-level problems (secrets, tests, CI, dependencies, structure), prioritized file/line findings, and what was and was not covered |
 
-Both skills are **read-only** towards the reviewed code. They never post comments, approve,
+All skills are **read-only** towards the reviewed code. They never post comments, approve,
 commit or push. A person decides what to do with the report.
 
 ## How it works
@@ -86,7 +87,11 @@ and Cursor (`.agents/skills/`), and for JetBrains Junie (`.junie/skills/`). See
   step only guarantees that findings are well-formed and correctly anchored, not that they are
   right. Read the report critically.
 - **review-diff sees only the diff.** It does not see the rest of the file, so it can miss
-  context or raise a false positive about code outside the hunk.
+  context or raise a false positive about code outside the hunk. Use review-change when the
+  project is available.
+- **review-change is only as good as the checkout.** If the project folder is not on the PR
+  branch, the agent has to apply the patch in its head. The skill reports this as
+  `checkout: base`.
 - **review-repo reads a sample.** On large repositories it reads the priority files (40 by
   default) in full and relies on scan signals for the rest. The report's Coverage section
   lists what was read.

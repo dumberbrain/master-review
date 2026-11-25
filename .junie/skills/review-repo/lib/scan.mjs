@@ -15,11 +15,11 @@ const TOP = 15;
 // Used only when the folder is not a git work tree (git ls-files already honours .gitignore).
 const WALK_IGNORED_DIRS = new Set([
   '.git', 'node_modules', 'dist', 'build', 'target', 'obj', 'coverage', 'vendor', '.next', '.nuxt',
-  '.venv', 'venv', '__pycache__', '.idea', '.vs', '.gradle', '.review-repo', '.review-comment',
+  '.venv', 'venv', '__pycache__', '.idea', '.vs', '.gradle', '.review-repo', '.review-comment', '.review-change',
 ]);
-const OWN_OUTPUT = ['.review-repo/**', '.review-comment/**', 'repo-review.md'];
+const OWN_OUTPUT = ['.review-repo/**', '.review-comment/**', '.review-change/**', 'repo-review.md', 'repo-review-*.md'];
 // The review skills themselves, when they are installed into the repo being reviewed.
-const TOOLING = ['**/skills/review-repo/**', '**/skills/review-diff/**'];
+const TOOLING = ['**/skills/review-repo/**', '**/skills/review-diff/**', '**/skills/review-change/**'];
 const MIN_HOTSPOT_CHANGES = 2;
 
 const EXT_LANG = {

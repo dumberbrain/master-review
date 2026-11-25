@@ -14,7 +14,7 @@ test('resolveAgents maps agent names to skill folders and removes duplicates', (
 });
 
 test('availableSkills lists the skills in .claude/skills', () => {
-  assert.deepEqual(availableSkills(), ['review-diff', 'review-repo']);
+  assert.deepEqual(availableSkills(), ['review-change', 'review-diff', 'review-repo']);
 });
 
 test('install copies each skill exactly and a re-run removes stale files', (t) => {
@@ -43,9 +43,9 @@ test('junie has no user-level folder', () => {
 
 test('missingIgnores lists report files the target does not ignore yet', (t) => {
   const repo = tempDir(t);
-  assert.deepEqual(missingIgnores(repo), ['.review-comment/', 'review.md', '.review-repo/', 'repo-review.md']);
-  fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules\n/.review-comment/\nreview.md\r\n.review-repo\n');
-  assert.deepEqual(missingIgnores(repo), ['repo-review.md']);
+  assert.deepEqual(missingIgnores(repo), ['.review-comment/', 'review.md', '.review-repo/', 'repo-review.md', '.review-change/', 'repo-review-*.md']);
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules\n/.review-comment/\nreview.md\r\n.review-repo\n.review-change/\n');
+  assert.deepEqual(missingIgnores(repo), ['repo-review.md', 'repo-review-*.md']);
 });
 
 test('CLI: --dry-run writes nothing; a real run installs; the installed helper works', (t) => {

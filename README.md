@@ -10,7 +10,8 @@ push or change the reviewed code.
 | Skill | Reviews | Writes |
 |-|-|-|
 | **review-diff** | a GitHub PR / GitLab MR diff (pasted or a `.diff` file) | `review.md`: copy-paste comments with the line to click, severity, rule and suggested code |
-| **review-repo** | a whole repository or one sub-folder | `repo-review.md`: overview, repository-level problems (secrets, tests, CI, lockfiles, structure), prioritized findings, coverage |
+| **review-change** | a PR / MR diff **plus the project folder** it belongs to | `review.md`, like review-diff, but the agent also checks callers, tests and conventions in the rest of the project |
+| **review-repo** | a whole repository or one sub-folder: this one or another one by path | `repo-review.md`: overview, repository-level problems (secrets, tests, CI, lockfiles, structure), prioritized findings, coverage |
 
 Works with **Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI, Cursor and JetBrains Junie**
 (open [Agent Skills](https://agentskills.io/specification) format). Needs Node.js >= 18.
@@ -24,7 +25,7 @@ git clone https://github.com/dumberbrain/master-review.git
 node master-review/scripts/install-skills.mjs --target path/to/your-repo
 ```
 
-This installs both skills for Claude Code (`.claude/skills/`) and for Codex, Copilot, Gemini
+This installs all skills for Claude Code (`.claude/skills/`) and for Codex, Copilot, Gemini
 CLI and Cursor (`.agents/skills/`). Other options:
 
 - `--agents claude`, `--agents agents` or `--agents claude,junie` for specific agents;
@@ -39,6 +40,8 @@ Add the outputs to the reviewed repository's `.gitignore`:
 review.md
 .review-repo/
 repo-review.md
+repo-review-*.md
+.review-change/
 ```
 
 **2. Review a pull request**
@@ -50,10 +53,16 @@ gh pr diff 42 > pr-42.diff          # or open https://github.com/<owner>/<repo>/
 In Claude Code: `/review-diff pr-42.diff`. In other agents: *"Review pr-42.diff with the
 review-diff skill"*. Open `review.md` and paste the comments you agree with into the PR.
 
-**3. Review the whole repository**
+If the project is on your disk, give its folder too, so the agent can check callers and tests
+outside the diff: `/review-change pr-42.diff ../shop-api`. See
+[docs/review-change.md](docs/review-change.md).
 
-In Claude Code: `/review-repo`, or `/review-repo src/api` for one folder. In other agents:
-*"Run the review-repo skill on this repository"*. Open `repo-review.md`.
+**3. Review a whole repository**
+
+In Claude Code: `/review-repo`, or `/review-repo src/api` for one folder. To review another
+repository and keep the report here: `/review-repo ../shop-api`, which writes
+`repo-review-shop-api.md`. In other agents: *"Run the review-repo skill on this repository"*
+or *"…on `../shop-api`"*. Open the report.
 
 ## Documentation
 
@@ -61,6 +70,7 @@ In Claude Code: `/review-repo`, or `/review-repo src/api` for one folder. In oth
 |-|-|
 | [docs/overview.md](docs/overview.md) | purpose, how it works, rules and severities, limitations |
 | [docs/review-diff.md](docs/review-diff.md) | getting diffs, running, reading `review.md`, pasting into GitHub/GitLab, CLI reference, troubleshooting |
+| [docs/review-change.md](docs/review-change.md) | reviewing a diff with its project, head vs base checkout, context helper, troubleshooting |
 | [docs/review-repo.md](docs/review-repo.md) | what is scanned, which files are read, reading `repo-review.md`, secrets, large repos, CLI reference, troubleshooting |
 | [docs/agents.md](docs/agents.md) | supported agents and their folders, installing, running in each agent, **rules for portable skills** |
 | [docs/rules.md](docs/rules.md) | rule file format; editing, adding and retiring rules; adding a language; skipping files |

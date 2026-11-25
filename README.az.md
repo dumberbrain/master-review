@@ -11,7 +11,8 @@ yoxlanılan kodu dəyişmir.
 | Skill | Nəyi yoxlayır | Nə yazır |
 |-|-|-|
 | **review-diff** | GitHub PR / GitLab MR diff-i (yapışdırılmış və ya `.diff` faylı) | `review.md`: kopyala-yapışdır şərhlər — klikləniləcək sətir, ciddilik dərəcəsi, qayda və təklif olunan kod |
-| **review-repo** | bütöv repozitoriya və ya bir alt qovluq | `repo-review.md`: ümumi baxış, repozitoriya səviyyəsində problemlər (sirlər, testlər, CI, lockfile-lar, struktur), prioritetləşdirilmiş tapıntılar, əhatə |
+| **review-change** | PR / MR diff-i **və onun aid olduğu layihə qovluğu** | `review.md`, review-diff kimi, amma agent layihənin qalan hissəsində çağırışları, testləri və konvensiyaları da yoxlayır |
+| **review-repo** | bütöv repozitoriya və ya bir alt qovluq: bu repozitoriya və ya yolu verilmiş başqa biri | `repo-review.md`: ümumi baxış, repozitoriya səviyyəsində problemlər (sirlər, testlər, CI, lockfile-lar, struktur), prioritetləşdirilmiş tapıntılar, əhatə |
 
 **Claude Code, OpenAI Codex, GitHub Copilot, Gemini CLI, Cursor və JetBrains Junie** ilə işləyir
 (açıq [Agent Skills](https://agentskills.io/specification) formatı). Node.js >= 18 tələb olunur.
@@ -25,7 +26,7 @@ git clone https://github.com/dumberbrain/master-review.git
 node master-review/scripts/install-skills.mjs --target path/to/your-repo
 ```
 
-Bu, hər iki skill-i Claude Code (`.claude/skills/`) və Codex, Copilot, Gemini CLI və Cursor
+Bu, bütün skill-ləri Claude Code (`.claude/skills/`) və Codex, Copilot, Gemini CLI və Cursor
 (`.agents/skills/`) üçün quraşdırır. Digər seçimlər:
 
 - konkret agentlər üçün `--agents claude`, `--agents agents` və ya `--agents claude,junie`;
@@ -40,6 +41,8 @@ Nəticə fayllarını yoxlanılan repozitoriyanın `.gitignore` faylına əlavə
 review.md
 .review-repo/
 repo-review.md
+repo-review-*.md
+.review-change/
 ```
 
 **2. Pull request-i yoxlayın**
@@ -51,10 +54,16 @@ gh pr diff 42 > pr-42.diff          # və ya https://github.com/<owner>/<repo>/p
 Claude Code-da: `/review-diff pr-42.diff`. Digər agentlərdə: *"Review pr-42.diff with the
 review-diff skill"*. `review.md` faylını açın və razı olduğunuz şərhləri PR-a yapışdırın.
 
+Layihə diskinizdədirsə, onun qovluğunu da verin. Belə olduqda agent diff-dən kənardakı
+çağırışları və testləri də yoxlaya bilər: `/review-change pr-42.diff ../shop-api`. Bax:
+[docs/review-change.md](docs/review-change.md).
+
 **3. Bütöv repozitoriyanı yoxlayın**
 
-Claude Code-da: `/review-repo`, və ya bir qovluq üçün `/review-repo src/api`. Digər agentlərdə:
-*"Run the review-repo skill on this repository"*. `repo-review.md` faylını açın.
+Claude Code-da: `/review-repo`, və ya bir qovluq üçün `/review-repo src/api`. Başqa
+repozitoriyanı yoxlayıb hesabatı burada saxlamaq üçün: `/review-repo ../shop-api`. Bu əmr
+`repo-review-shop-api.md` faylını yazır. Digər agentlərdə: *"Run the review-repo skill on this
+repository"* və ya *"…on `../shop-api`"*. Hesabatı açın.
 
 ## Sənədlər
 
@@ -64,6 +73,7 @@ Sənədlər ingilis dilindədir.
 |-|-|
 | [docs/overview.md](docs/overview.md) | məqsəd, necə işləyir, qaydalar və ciddilik dərəcələri, məhdudiyyətlər |
 | [docs/review-diff.md](docs/review-diff.md) | diff-ləri əldə etmək, işə salmaq, `review.md`-ni oxumaq, GitHub/GitLab-a yapışdırmaq, CLI arayışı, problemlərin həlli |
+| [docs/review-change.md](docs/review-change.md) | diff-i layihəsi ilə birlikdə yoxlamaq, head və ya base checkout, context köməkçisi, problemlərin həlli |
 | [docs/review-repo.md](docs/review-repo.md) | nə skan olunur, hansı fayllar oxunur, `repo-review.md`-ni oxumaq, sirlər, böyük repozitoriyalar, CLI arayışı, problemlərin həlli |
 | [docs/agents.md](docs/agents.md) | dəstəklənən agentlər və onların qovluqları, quraşdırma, hər agentdə işə salma, **portativ skill-lər üçün qaydalar** |
 | [docs/rules.md](docs/rules.md) | qayda faylının formatı; qaydaları redaktə etmək, əlavə etmək və ləğv etmək; dil əlavə etmək; faylları ötürmək |

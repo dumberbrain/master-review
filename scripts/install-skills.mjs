@@ -25,7 +25,7 @@ const ALIASES = { codex: 'agents', copilot: 'agents', gemini: 'agents', cursor: 
 export const DEFAULT_AGENTS = ['claude', 'agents'];
 
 // Report and work files the skills write into the reviewed repository.
-export const OUTPUTS = ['.review-comment/', 'review.md', '.review-repo/', 'repo-review.md'];
+export const OUTPUTS = ['.review-comment/', 'review.md', '.review-repo/', 'repo-review.md', '.review-change/', 'repo-review-*.md'];
 
 export function availableSkills(root = ROOT) {
   const dir = path.join(root, SOURCE);

@@ -4,3 +4,5 @@ test.js
 .review-repo/
 repo-review.md
 .idea/
+.review-change/
+repo-review-*.md

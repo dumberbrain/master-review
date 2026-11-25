@@ -16,13 +16,14 @@ what your team's reviews flag.
 
 | File (edit here) | Prefix | Used by |
 |-|-|-|
-| `.claude/skills/review-diff/rules/general.md` | `GEN` | both skills, every file |
-| `.claude/skills/review-diff/rules/<language>.md` | `CS`, `GO`, `JAVA`, `JS`, `TS`, `REACT` | both skills, by file extension |
+| `.claude/skills/review-diff/rules/general.md` | `GEN` | all skills, every file |
+| `.claude/skills/review-diff/rules/<language>.md` | `CS`, `GO`, `JAVA`, `JS`, `TS`, `REACT` | all skills, by file extension |
 | `.claude/skills/review-diff/rules/languages.json` | — | maps extensions to rule files; skip list |
 | `.claude/skills/review-repo/rules/repo.md` | `REPO` | review-repo only |
 
-`review-repo` gets a copy of the `review-diff` rules through `npm run sync`. Never edit the
-copies under `review-repo/rules/` (except `repo.md`), `.agents/` or `.junie/`.
+`review-repo` and `review-change` get a copy of the `review-diff` rules through `npm run sync`.
+Never edit the copies under `review-repo/rules/` (except `repo.md`), `review-change/rules/`,
+`.agents/` or `.junie/`.
 
 ## Rule file format
 

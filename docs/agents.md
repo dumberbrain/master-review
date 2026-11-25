@@ -26,8 +26,8 @@ Per agent, from each vendor's documentation (checked November 2026):
 
 | Agent | Project-level folders | User-level folders | How to run a skill |
 |-|-|-|-|
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` | `/review-diff`, `/review-repo`, or ask ("review this diff") |
-| OpenAI Codex | `.agents/skills/` (from the working directory up to the repo root) | `~/.agents/skills/` | `$review-diff` / `$review-repo`, the `/skills` picker, or ask |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` | `/review-diff`, `/review-change`, `/review-repo`, or ask ("review this diff") |
+| OpenAI Codex | `.agents/skills/` (from the working directory up to the repo root) | `~/.agents/skills/` | `$review-diff` / `$review-change` / `$review-repo`, the `/skills` picker, or ask |
 | GitHub Copilot (VS Code / JetBrains / Visual Studio agent mode, Copilot CLI, cloud agent) | `.github/skills/`, `.claude/skills/`, `.agents/skills/` | `~/.copilot/skills/`, `~/.agents/skills/` | ask; Copilot picks the skill from its description |
 | Gemini CLI | `.gemini/skills/`, `.agents/skills/` | `~/.gemini/skills/`, `~/.agents/skills/` | ask; Gemini activates the skill after you confirm the prompt |
 | Cursor | `.agents/skills/`, `.cursor/skills/` (also `.claude/skills/`, `.codex/skills/`) | `~/.agents/skills/`, `~/.cursor/skills/` (also `~/.claude/skills/`, `~/.codex/skills/`) | type `/` in Agent chat and pick the skill, or ask |
@@ -79,6 +79,8 @@ After installing into a repository, the script lists the report files that the t
 review.md
 .review-repo/
 repo-review.md
+.review-change/
+repo-review-*.md
 ```
 
 Which folders to install:
@@ -99,7 +101,9 @@ The skills do not depend on the agent's slash commands. In any agent you can say
 
 - "Review this diff with the review-diff skill" and paste the diff, or name a file:
   "use review-diff on `changes.diff`, write `pr-42.md`".
-- "Run the review-repo skill on this repository", or "…on `src/api`, output `api-review.md`".
+- "Review `pr-42.diff` with the review-change skill; the project is in `../shop-api`".
+- "Run the review-repo skill on this repository", or "…on `src/api`, output `api-review.md`",
+  or "…on the repository in `../shop-api`".
 
 The agent loads `SKILL.md` and follows its steps. It runs the helper with `node`, reads the
 files, writes the findings JSON, validates it with the helper and renders the report.
@@ -111,7 +115,8 @@ files, writes the findings JSON, validates it with the helper and renders the re
 | Agent Skills support (reads `SKILL.md`) | to find and load the skill |
 | Shell commands, at least `node` | the helper CLIs in `bin/` |
 | Read files in the repository | patches, source files, rule files |
-| Write files in the working directory | `.review-comment/`, `.review-repo/` and the report |
+| Write files in the working directory | `.review-comment/`, `.review-change/`, `.review-repo/` and the report |
+| Read files outside the working directory (review-change, and review-repo on another repository) | the reviewed project; the agent may ask you to allow access to that folder |
 | Node.js >= 18 on the machine | the helpers use only `node:` built-ins |
 
 An agent mode that cannot run commands, such as a pure chat panel, cannot run these skills.

@@ -23,16 +23,24 @@ The reviewed code is never changed.
 
 ## Quick start
 
-Install the skill into the repository you want to review (see [agents.md](agents.md#installing)),
-open your agent in that repository, then:
+Install the skill (see [agents.md](agents.md#installing)) and open your agent in the
+repository where it is installed. Then review that repository, or another one by its path:
 
 ```text
-/review-repo                   (Claude Code: whole repository → repo-review.md)
-/review-repo src/api           (only src/api)
-/review-repo . audit.md        (whole repository, custom output file)
+/review-repo                          (Claude Code: whole repository → repo-review.md)
+/review-repo src/api                  (only src/api)
+/review-repo . audit.md               (whole repository, custom output file)
+/review-repo ../shop-api              (another repository → repo-review-shop-api.md here)
+/review-repo "C:/work/shop-api" api   (only api/ of another repository)
 ```
 
-In other agents, ask: *"Run the review-repo skill on this repository"* or *"…on `src/api`"*.
+In other agents, ask: *"Run the review-repo skill on this repository"*, *"…on `src/api`"* or
+*"…on the repository in `../shop-api`"*.
+
+When you review another repository, the work folder `.review-repo/` and the report are written
+to the current working directory. Nothing is written into the reviewed repository. Links in the
+report are relative paths into it, so they open in the IDE. A path that is absolute or starts
+with `..` is treated as the repository to review; any other folder argument is a sub-folder.
 
 ## When to use it
 
@@ -41,7 +49,8 @@ In other agents, ask: *"Run the review-repo skill on this repository"* or *"…o
 - Planning technical-debt work, with findings ranked by severity.
 - Checking that a template or starter repository follows the team rules.
 
-For reviewing a single change, use [`review-diff`](review-diff.md) instead.
+For reviewing a single change, use [`review-diff`](review-diff.md) or, with the project on
+disk, [`review-change`](review-change.md) instead.
 
 ## What happens during a run
 
@@ -191,7 +200,9 @@ Findings file (`findings.json`):
 
 | Problem | Cause / fix |
 |-|-|
-| The skill's own files show up in the review | they are skipped by default (`**/skills/review-repo/**`, `**/skills/review-diff/**`). If they still appear, the skill is installed in an unusual folder |
+| The skill's own files show up in the review | they are skipped by default (`**/skills/review-repo/**`, `**/skills/review-diff/**`, `**/skills/review-change/**`). If they still appear, the skill is installed in an unusual folder |
+| `not a directory` when reviewing another repository | the path is wrong. Use an absolute path, or one relative to the current working directory |
+| The agent asks to approve reading files outside the working directory | expected in Claude Code when the reviewed repository is elsewhere. Allow read access to that folder |
 | Few files reviewed | expected on large repositories. Pass a sub-folder, or raise `--max-files` |
 | Many secret candidates in docs or tests | the agent should verify and drop them. Check the findings, not the scan |
 | "rule … does not apply to …" | the agent cited a rule for another language. It has to pick a rule that fits the file |

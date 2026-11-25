@@ -6,11 +6,15 @@ working **on** this repository. For how to **use** the skills, see [README.md](R
 
 ## What this repository is
 
-Two portable [Agent Skills](https://agentskills.io/specification) for code review:
+Three portable [Agent Skills](https://agentskills.io/specification) for code review:
 
 - `review-diff` — reviews a pasted GitHub PR / GitLab MR diff and writes `review.md` with
   copy-paste comments.
-- `review-repo` — reviews a whole repository and writes `repo-review.md`.
+- `review-change` — reviews a diff together with the project folder it belongs to (callers,
+  tests, conventions) and writes `review.md`. It shares the `review-diff` helper and adds
+  `bin/context.mjs`.
+- `review-repo` — reviews a whole repository (this one or another one by path) and writes
+  `repo-review.md`.
 
 Each skill is a folder with `SKILL.md` (instructions for the agent), `bin/` (a Node.js helper
 CLI), `lib/` (its modules) and `rules/` (the review rules). The agent does the judgement; the
@@ -22,6 +26,8 @@ helper does everything deterministic (parsing, line anchoring, validation, rende
   generated mirrors; never edit them by hand.
 - **Edit shared files only in `review-diff`:** `rules/*` (except `review-repo/rules/repo.md`),
   `lib/errors.mjs`, `lib/languages.mjs`, `lib/rules.mjs`. `review-repo` receives a copy.
+  `review-change` receives `bin/review.mjs`, `rules/*` and every `lib/*.mjs` except its own
+  `lib/project.mjs` (the full list is `SHARED` in `scripts/sync-skills.mjs`).
 - After any change under `.claude/skills/`, run `npm run sync`, then `npm test`.
   `npm test` fails if a mirror or copy is out of date.
 
@@ -58,10 +64,12 @@ agent only needs to read/write files and run `node`.
 ## Safety
 
 The skills are read-only for the reviewed code: they write only their work folder
-(`.review-comment/`, `.review-repo/`) and the report. Keep it that way — no posting, commenting,
+(`.review-comment/`, `.review-change/`, `.review-repo/`) and the report, in the current working
+directory, even when the reviewed project is elsewhere. Keep it that way — no posting, commenting,
 committing or pushing from a skill. Never write secret values into scans, findings or reports.
 
 ## Commits
 
 Conventional Commits (`feat(review-repo): …`, `fix(review-diff): …`, `docs: …`, `test: …`).
-Do not commit review outputs (`review.md`, `repo-review.md`, `.review-comment/`, `.review-repo/`).
+Do not commit review outputs (`review.md`, `repo-review*.md`, `.review-comment/`,
+`.review-change/`, `.review-repo/`).

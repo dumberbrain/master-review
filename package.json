@@ -1,7 +1,7 @@
 {
   "name": "master-review",
   "private": true,
-  "description": "Review skills for Claude Code and Junie: review-diff (pasted PR/MR diffs) and review-repo (whole repository).",
+  "description": "Review skills for AI coding agents: review-diff (pasted PR/MR diffs), review-change (a diff with its project) and review-repo (a whole repository).",
   "engines": {
     "node": ">=22"
   },

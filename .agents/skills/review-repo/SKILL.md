@@ -1,15 +1,16 @@
 ---
 name: review-repo
-description: Review a whole repository (not a diff) against this skill's rule files and write repo-review.md with prioritized findings (file, line, severity, rule, suggested fix) and repository-level problems such as committed secrets, missing tests, CI or lockfiles, layering violations and hotspots. Read-only, never changes the code. Use when the user asks to analyze, audit or review the whole repo / codebase / project, or runs /review-repo.
-argument-hint: [subfolder] [output.md]
+description: Review a whole repository (not a diff) — the current one or another repository given by path — against this skill's rule files and write repo-review.md with prioritized findings (file, line, severity, rule, suggested fix) and repository-level problems such as committed secrets, missing tests, CI or lockfiles, layering violations and hotspots. Read-only, never changes the reviewed code. Use when the user asks to analyze, audit or review a whole repo / codebase / project, or runs /review-repo.
+argument-hint: [repo-path] [subfolder] [output.md]
 allowed-tools: Read, Write, Glob, Grep, Bash(node:*)
 ---
 
 # Review a whole repository into `repo-review.md`
 
-You review the repository in the current working directory against this skill's rule files
-and write a Markdown report. **You never edit, delete, commit or push anything in the repo** —
-the only files you write are under `.review-repo/` and the report itself.
+You review a repository (`REPO`: the current working directory, or another folder the user
+gives) against this skill's rule files and write a Markdown report. **You never edit, delete,
+commit or push anything in `REPO`** — the only files you write are under `.review-repo/` and
+the report itself, both in the current working directory.
 
 ## Setup
 
@@ -19,20 +20,31 @@ the only files you write are under `.review-repo/` and the report itself.
   The helper needs Node.js >= 18 and a shell; it has no dependencies.
 - `WORK` = `.review-repo/` in the current working directory. Keep it after the run.
 - Arguments (in Claude Code `$ARGUMENTS`; in other agents take them from the user's message):
-  an optional sub-folder to limit the review to (monorepos, big repos) and an optional output
-  path. An argument ending in `.md` is the output path. Default output: `./repo-review.md`.
+  - An argument ending in `.md` is the output path.
+  - A path to an existing directory outside the current working directory (absolute, or
+    starting with `..`, or one the user calls "the repo / project to review") is `REPO`.
+    Default: the current working directory.
+  - A remaining path is a sub-folder of `REPO` to limit the review to (monorepos, big repos),
+    relative to `REPO`.
+  - Default output: `./repo-review.md` when `REPO` is the current working directory,
+    otherwise `./repo-review-<name>.md`, where `<name>` is the last folder name of `REPO`.
+- All paths in `scan.json` and in findings are relative to `REPO`. To read or Grep a file, use
+  `<REPO>/<path>`; never read the same relative path from the current working directory.
 
 ## Steps
 
-1. **Scan** — `HELPER scan --out .review-repo/scan.json [--path <subfolder>] [--max-files 40]`
+1. **Scan** — `HELPER scan --root "<REPO>" --out .review-repo/scan.json [--path <subfolder>] [--max-files 40]`
+   (omit `--root` when `REPO` is the current working directory).
+   Exit 1 with `not a directory`: the path is wrong — tell the user and stop.
    The JSON on stdout has: `totals`, `languages`, `skippedByReason`, `signals` (readme, CI,
    manifests and missing lockfiles, test counts, sensitive files, secret candidates, TODOs,
    large files, git hotspots, committed build artifacts, large binaries), `context` (docs,
    manifests and config to read first) and `priority` (code files to review, most important
    first, with their `ruleFiles`). Per-file data is in `scan.json` (`files[]`: `path`, `lines`,
    `language`, `ruleFiles`, `skipped`).
-   The review skills' own folders (`**/skills/review-repo/**`, `**/skills/review-diff/**`) are
-   skipped as "review tooling"; add `--include-tooling` only when reviewing those skills.
+   The review skills' own folders (`**/skills/review-repo/**`, `**/skills/review-diff/**`,
+   `**/skills/review-change/**`) are skipped as "review tooling"; add `--include-tooling` only
+   when reviewing those skills.
    If the repo has more than ~2000 reviewable files and no sub-folder was given, tell the user
    that the review covers the `priority` files plus the scan signals, and that they can pass a
    sub-folder for a deeper pass.
@@ -112,9 +124,9 @@ the only files you write are under `.review-repo/` and the report itself.
 8. **Render** — `HELPER render .review-repo/review.json --out <output-path>`
 
 9. **Report** to the user, briefly:
-   - output path; files reviewed of reviewable files;
+   - output path and the reviewed `REPO`; files reviewed of reviewable files;
    - findings per severity and the top 3 (file:line — rule — title);
-   - if `.review-repo/` or the report are not in `.gitignore`, suggest adding them (do not edit
-     `.gitignore` yourself).
+   - if `.review-repo/` or the report are not in the `.gitignore` of the current working
+     directory, suggest adding them (do not edit `.gitignore` yourself).
 
 Do not paste the whole report into the chat.

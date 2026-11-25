@@ -2,9 +2,10 @@
 // `.claude/skills/` is the single source of truth for every skill in this repo.
 //
 // This script
-//   1. copies the files review-repo shares with review-diff (rule files and common libs)
-//      from review-diff into review-repo, so each skill folder stays self-contained and can
-//      be copied into another repository on its own;
+//   1. copies the files review-repo and review-change share with review-diff (rule files,
+//      common libs, and for review-change the diff helper) from review-diff into them, so
+//      each skill folder stays self-contained and can be copied into another repository on
+//      its own;
 //   2. mirrors every `.claude/skills/<name>/` into `.agents/skills/<name>/` (the cross-agent
 //      folder read by Codex, Copilot, Gemini CLI and Cursor) and `.junie/skills/<name>/`
 //      (extra files in a mirror are deleted; skills that exist only in a mirror are left alone).
@@ -25,6 +26,22 @@ const SHARED = [
     from: 'review-diff',
     to: 'review-repo',
     paths: ['lib/errors.mjs', 'lib/languages.mjs', 'lib/rules.mjs', 'rules'],
+  },
+  {
+    // review-change is review-diff plus project context: the whole diff helper is shared.
+    from: 'review-diff',
+    to: 'review-change',
+    paths: [
+      'bin/review.mjs',
+      'lib/diff.mjs',
+      'lib/errors.mjs',
+      'lib/findings.mjs',
+      'lib/languages.mjs',
+      'lib/merge-request.mjs',
+      'lib/render.mjs',
+      'lib/rules.mjs',
+      'rules',
+    ],
   },
 ];
 
