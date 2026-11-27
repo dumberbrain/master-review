@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\"",
     "sync": "node scripts/sync-skills.mjs",
-    "sync:check": "node scripts/sync-skills.mjs --check"
+    "sync:check": "node scripts/sync-skills.mjs --check",
+    "bench": "node scripts/bench.mjs"
   }
 }

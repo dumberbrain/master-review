@@ -13,8 +13,12 @@ const RISKS = [
   { tag: 'crypto', re: /\b(md5|sha1|Math\.random|createCipher\w*|DES|ECB|RNGCryptoServiceProvider|math\/rand)\b/ },
   { tag: 'network', re: /\b(fetch|axios|XMLHttpRequest|HttpClient|http\.(Get|Post|NewRequest)|redirect|cors|set-cookie|cookie)\b/i },
   { tag: 'concurrency', re: /\b(go func|sync\.Mutex|mutex|synchronized|Task\.Run|Parallel\.|ConcurrentHashMap|Interlocked|async void)\b/ },
-  { tag: 'data', path: true, re: /(^|\/)(migrations?|schema)\b|\.sql$|\b(DROP|ALTER) TABLE\b|\bTRUNCATE\b/i },
+  // SQL keywords are matched in upper case only: `truncate` is also a CSS class, `alter` a word.
+  { tag: 'data', pathRe: /(^|\/)(migrations?|schema)(\/|\.|$)|\.sql$/i, re: /\b(DROP|ALTER) TABLE\b|\bTRUNCATE( TABLE)?\s+\w/ },
 ];
+
+// Files where indentation is syntax: a whitespace-only change there is a real change.
+const INDENT_SENSITIVE = /\.(py|pyi|ya?ml|haml|pug|slim|sass|styl|coffee|nim|fs|fsx)$|(^|\/)(Makefile|[^/]*\.mk)$/i;
 
 function scanPatch(patch) {
   const added = [];
@@ -41,8 +45,10 @@ function scanPatch(patch) {
   return { added, removed, head };
 }
 
+// Same lines up to indentation and runs of spaces. Spaces are collapsed, not removed, so
+// `return x` → `returnx` or `"a b"` → `"ab"` still count as real changes.
 function sameIgnoringWhitespace(a, b) {
-  const norm = (l) => l.replace(/\s+/g, '');
+  const norm = (l) => l.trim().replace(/\s+/g, ' ');
   const count = new Map();
   for (const l of a) count.set(norm(l), (count.get(norm(l)) ?? 0) + 1);
   for (const l of b) {
@@ -62,11 +68,11 @@ function sameIgnoringWhitespace(a, b) {
 export function triageFile(filePath, patch) {
   const { added, removed, head } = scanPatch(patch);
   if (head.some((l) => GENERATED_MARKER.test(l))) return { skipped: { reason: 'generated (marker in file header)' }, risk: [], score: 0, added: added.length };
-  if (added.every((l) => !l.trim()) || sameIgnoringWhitespace(added, removed)) {
+  if (!INDENT_SENSITIVE.test(filePath) && (added.every((l) => !l.trim()) || sameIgnoringWhitespace(added, removed))) {
     return { skipped: { reason: 'whitespace-only change' }, risk: [], score: 0, added: added.length };
   }
   const code = added.join('\n');
-  const risk = RISKS.filter((r) => r.re.test(code) || (r.path && r.re.test(filePath))).map((r) => r.tag);
+  const risk = RISKS.filter((r) => r.re.test(code) || (r.path && r.re.test(filePath)) || r.pathRe?.test(filePath)).map((r) => r.tag);
   const isTest = TEST_PATH.test(filePath);
   if (isTest) risk.push('test');
   // A risk tag outweighs size: a one-line eval() ranks above a 500-line plain change.

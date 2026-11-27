@@ -13,12 +13,14 @@ function languagesOf(ruleSet, ruleFileIds) {
  * and `look-for` (what detection needs). `why` / `fix` / examples stay out; the agent fetches
  * them with the `rule` command only for rules it is about to cite.
  */
-export function ruleIndex(ruleSet, ruleFileIds) {
+export const DIFF_INDEX_NOTE = 'Cite a rule only for a file whose `rules:` list (in the patch batch header) contains the section language.';
+
+export function ruleIndex(ruleSet, ruleFileIds, { note = DIFF_INDEX_NOTE } = {}) {
   const wanted = new Set(ruleFileIds);
   const out = [
     '# Rule index',
     '',
-    'Cite a rule only for a file whose `rules:` list (in the patch batch header) contains the section language.',
+    note,
     'Format: `ID severity · title — look-for`. Full why/fix/example: `HELPER rule <ID>`.',
   ];
   let count = 0;

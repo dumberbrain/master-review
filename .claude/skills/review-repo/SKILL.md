@@ -43,7 +43,7 @@ the report itself, both in the current working directory.
    manifests and missing lockfiles, test counts, sensitive files, secret candidates, TODOs,
    large files, git hotspots, committed build artifacts, large binaries), `context` (docs,
    manifests and config to read first), `priority` (code files to review, most important
-   first, with their `ruleFiles`) and `rules` (enabled `packs`, `files`, `overrides`). Per-file data is in `scan.json` (`files[]`: `path`, `lines`,
+   first, with their `ruleFiles`) and `rules` (enabled `packs`, `overrides`, and `index`: the rule index file). Per-file data is in `scan.json` (`files[]`: `path`, `lines`,
    `language`, `ruleFiles`, `skipped`).
    The review skills' own folders (`**/skills/review-repo/**`, `**/skills/review-diff/**`,
    `**/skills/review-change/**`) are skipped as "review tooling"; add `--include-tooling` only
@@ -56,13 +56,13 @@ the report itself, both in the current working directory.
    Work out what the project does, its main parts and layers, how it is built, tested,
    configured and deployed. Write this as a 3–6 sentence `overview` (plain Markdown).
 
-3. **Load rules** — read each path in `rules.files` once (keys are rule file ids like
-   `repo/repo.md`, values are the paths to read): the `general` rule files plus those of the
-   `priority` files. A file may only cite rules from the ids in its own `ruleFiles`; a
-   repository-wide finding only rules from `general` files. Use only rules with
-   `status: active`, then apply `rules.overrides`: `status: retired` there means never cite the
-   rule, and `severity` there replaces its default. The language rules were written for diffs
-   ("a changed function…"); apply them to existing code.
+3. **Read the rule index** — read `rules.index` once: one line per active rule
+   (`ID severity · title — look-for`) of the `general` rule files plus those of the
+   `priority` files, grouped by rule file and language, overrides already applied. A file may
+   only cite rules from the rule files in its own `ruleFiles`; a repository-wide finding only
+   rules from `general` files. Before citing a rule whose `why`/`fix` you cannot state
+   precisely, run `HELPER rule <ID> [ID…]` — only for rules you will cite. The language rules
+   were written for diffs ("a changed function…"); apply them to existing code.
 
 4. **Repository-level review** — go through the `REPO-*` rules using the scan signals (skip
    this step when the `repo` pack is disabled).

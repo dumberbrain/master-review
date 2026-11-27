@@ -91,6 +91,20 @@ kiçik Node.js köməkçisi dəqiq olmalı olan hər şeyi edir:
   edən tapıntıları rədd etmək;
 - hesabatı yaratmaq.
 
+**Az token, az yalançı tapıntı.** Ucuz işi köməkçi görür ki, model yalnız lazım olanı oxusun:
+
+- review tələb etməyənləri (lock fayllar, generasiya olunmuş fayllar, yalnız whitespace
+  dəyişiklikləri) buraxır, qalanlarını riskə görə düzür (auth, injection, secrets, crypto, …);
+- model qayda fayllarının tam mətni əvəzinə hər qayda üçün bir sətirlik indeks alır, qaydanın
+  tam səbəbini və həllini yalnız ona istinad edəndə soruşur;
+- patch-lər hər şərh yazıla bilən sətrin nömrəsi ilə adi mətn kimi verilir: tokenlər nə
+  escape olunmuş JSON-a, nə də sətir nömrələrini hesablamağa gedir;
+- hər tapıntının əminlik dərəcəsi var; az əmin tapıntılar və üçdən artıq kiçik təklif
+  hesabata düşmür.
+
+16 fayllıq TypeScript/React pull request-də agentin oxuduğu həcm iki dəfə azalır (təxminən
+27k → 14k token). Öz diff-inizi ölçmək üçün: `npm run bench -- <file.diff>`.
+
 Ətraflı: [docs/overview.md](docs/overview.md#how-it-works).
 
 ## Qaydalar

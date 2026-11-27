@@ -39,6 +39,7 @@ helper does everything deterministic (parsing, line anchoring, validation, rende
 | `npm test` | all tests (`node:test`, Node >= 22 for the test runner) |
 | `npm run sync` | regenerate `.agents/skills/`, `.junie/skills/` and the shared copies |
 | `npm run sync:check` | report drift without writing |
+| `npm run bench -- <file.diff>` | how much text a review-diff run makes the agent read, vs. full rule files + raw JSON |
 | `node scripts/install-skills.mjs --target <repo> [--agents claude,agents,junie]` | install the skills into another repository |
 
 ## Code rules

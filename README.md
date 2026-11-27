@@ -88,6 +88,21 @@ A small Node.js helper in each skill does everything that must be exact:
   numbers;
 - rendering the report.
 
+**Few tokens, few false positives.** The helper does the cheap work so the model reads only
+what it needs:
+
+- it skips what needs no review (lockfiles, generated files, whitespace-only changes) and
+  orders the rest riskiest first (auth, injection, secrets, crypto, …);
+- the model gets a one-line-per-rule index instead of the full rule files, and fetches a
+  rule's full reason and fix only when it cites it;
+- patches come as plain text with the line number on every commentable line, so no tokens go
+  into escaped JSON or into working out line numbers;
+- every finding carries a confidence; low-confidence findings and nits beyond three are left
+  out of the report.
+
+On a 16-file TypeScript/React pull request this halves what the agent reads (about 27k → 14k
+tokens). Measure your own diff with `npm run bench -- <file.diff>`.
+
 Details: [docs/overview.md](docs/overview.md#how-it-works).
 
 ## Rules

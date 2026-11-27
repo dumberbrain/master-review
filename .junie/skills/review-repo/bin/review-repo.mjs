@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { ruleDetails, ruleIndex } from '../lib/digest.mjs';
 import { CliError, EXIT } from '../lib/errors.mjs';
 import { REPO_PACKS, validateRepoFindings } from '../lib/repo-findings.mjs';
 import { renderRepoReview } from '../lib/repo-render.mjs';
-import { describeRuleSet, findProjectConfig, GENERAL, loadRuleSet, ruleSetSummary } from '../lib/rules.mjs';
+import { describeRuleSet, findProjectConfig, GENERAL, loadRuleSet } from '../lib/rules.mjs';
 import { scanRepo } from '../lib/scan.mjs';
 
 const USAGE = `usage: review-repo.mjs <command> [args]
 
   scan [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] [--config <file>] --out <scan.json>
+      also writes rules.md (one line per rule of the needed rule files) next to <scan.json>
+  rule <RULE-ID> [RULE-ID...] [--config <file>]
   validate <scan.json> <findings.json> --out <review.json> [--config <file>]
   render <review.json> --out <repo-review.md>
   rules [--config <file>]
@@ -54,6 +57,9 @@ function print(obj) {
   process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
 }
 
+const REPO_INDEX_NOTE =
+  'A file may cite only rules from sections whose language is "general" or one of its own languages (see its `ruleFiles` in `priority`); a repository-wide finding only "general" ones.';
+
 function loadRepoRuleSet(projectConfig) {
   return loadRuleSet({ projectConfig, extraPacks: REPO_PACKS });
 }
@@ -81,7 +87,25 @@ const commands = {
     const { files, ...summary } = scan;
     // Rule files to load: every general one (repository-wide findings) plus the priority files' ones.
     const general = ruleSet.files.filter((f) => f.enabled && f.language === GENERAL).map((f) => f.id);
-    print({ ...summary, rules: ruleSetSummary(ruleSet, [...general, ...scan.priority.flatMap((p) => p.ruleFiles)]) });
+    const indexPath = path.join(path.dirname(out), 'rules.md').replace(/\\/g, '/');
+    const index = ruleIndex(ruleSet, [...general, ...scan.priority.flatMap((p) => p.ruleFiles)], { note: REPO_INDEX_NOTE });
+    writeFile(indexPath, index.text);
+    const rules = {
+      config: ruleSet.projectConfig,
+      packs: Object.values(ruleSet.packs).filter((p) => p.enabled).map((p) => p.name),
+      disabledPacks: Object.values(ruleSet.packs).filter((p) => !p.enabled).map((p) => p.name),
+      index: indexPath,
+      indexedRules: index.rules,
+    };
+    if (Object.keys(ruleSet.overrides).length) rules.overrides = ruleSet.overrides;
+    print({ ...summary, rules });
+  },
+
+  rule({ positional, flags }) {
+    if (!positional.length) need(undefined, '<RULE-ID>');
+    const { rules, unknown } = ruleDetails(loadRepoRuleSet(findProjectConfig(flags.config)), positional);
+    print(unknown.length ? { rules, unknown } : rules);
+    if (unknown.length) process.exitCode = EXIT.INPUT;
   },
 
   rules({ flags }) {

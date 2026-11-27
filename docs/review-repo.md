@@ -162,7 +162,8 @@ input.
 
 | Command | Purpose |
 |-|-|
-| `scan --out <scan.json> [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] [--config <file>]` | inventory + signals + priority + rule set. stdout omits the per-file list; `scan.json` has it |
+| `scan --out <scan.json> [--root <dir>] [--path <subdir>] [--max-files <n>] [--no-git] [--include-tooling] [--config <file>]` | inventory + signals + priority + rule set. stdout omits the per-file list; `scan.json` has it. Also writes `rules.md` next to `scan.json`: a rule index with one line per active rule (id, severity, title, `look-for`) of the general rule files and those of the priority files |
+| `rule <RULE-ID> [RULE-ID...] [--config <file>]` | print the full `why`, `fix`, `appliesTo` and example of the named rules; exit 1 if an id is unknown |
 | `validate <scan.json> <findings.json> --out <review.json> [--config <file>]` | check findings and capture snippets; writes nothing if any finding is invalid. Uses the config recorded by `scan` unless `--config` is given |
 | `render <review.json> --out <repo-review.md>` | write the report; links are relative to the output file |
 | `rules [--config <file>]` | print the effective rule config, including the `repo` pack, and lint problems; exit 1 on problems |

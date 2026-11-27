@@ -21,7 +21,13 @@ test('scan --root reviews another folder; validate and render write here with li
   assert.ok(scan.json.priority.some((f) => f.path === 'src/index.js'));
   assert.equal(scan.json.rules.config, null, 'no review.config.json in the working directory');
   assert.ok(scan.json.rules.packs.includes('repo'));
-  assert.equal(scan.json.rules.files['repo/repo.md'], path.join(REPO_SKILL, 'rules', 'packs', 'repo', 'repo.md'));
+  assert.equal(scan.json.rules.index, '.review-repo/rules.md', 'the index is written next to scan.json');
+  const index = fs.readFileSync(path.join(here, scan.json.rules.index), 'utf8');
+  assert.match(index, /^## repo\/repo\.md \(general\)$/m);
+  assert.match(index, /^- REPO-001 /m);
+  const rule = run(['rule', 'REPO-001']);
+  assert.equal(rule.status, 0, rule.stderr);
+  assert.match(rule.json['REPO-001'].why, /\S/);
 
   fs.writeFileSync(
     path.join(here, '.review-repo', 'findings.json'),

@@ -25,7 +25,7 @@ const SHARED = [
   {
     from: 'review-diff',
     to: 'review-repo',
-    paths: ['lib/errors.mjs', 'lib/languages.mjs', 'lib/rules.mjs', 'rules'],
+    paths: ['lib/digest.mjs', 'lib/errors.mjs', 'lib/languages.mjs', 'lib/rules.mjs', 'rules'],
   },
   {
     // review-change is review-diff plus project context: the whole diff helper is shared.
