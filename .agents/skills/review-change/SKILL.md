@@ -16,11 +16,15 @@ edit files in it, do not run git commands that change it (checkout, stash, pull,
 do not build or run its code or tests. The only files you write are under `.review-change/`
 and the report, both in the current working directory.
 
+Goal: **few comments, each one real.** A missed nit costs nothing; a wrong comment costs the
+author's trust. Read only what you need: open project files for a reason, and only the
+part that answers it.
+
 ## Setup
 
 - `SKILL_ROOT` = this skill's base directory: the folder that holds this `SKILL.md` and
   `bin/`, `lib/`, `rules/` (e.g. `.claude/skills/review-change`, `.agents/skills/review-change`).
-- `HELPER` = `node "<SKILL_ROOT>/bin/review.mjs"` (parse, lines, validate, render) and
+- `HELPER` = `node "<SKILL_ROOT>/bin/review.mjs"` (parse, rule, lines, validate, render) and
   `CONTEXT` = `node "<SKILL_ROOT>/bin/context.mjs"` (project facts). Always quote paths, they
   may contain spaces. Both need Node.js >= 18 and a shell; they have no dependencies.
 - `WORK` = `.review-change/` in the current working directory. Keep it after the run.
@@ -46,8 +50,9 @@ and the report, both in the current working directory.
    - Rule config: the helper uses `./review.config.json` (current working directory) when it
      exists. If the user names another config file, add `--config "<file>"`.
    - Exit 1 naming a config or rule file: show the message and stop; the user must fix it.
-   - The JSON lists `reviewable` files with their `ruleFiles` and commentable `lines`,
-     `skippedFiles` with reasons, and `rules` (enabled `packs`, `files`, `overrides`).
+   - Stdout gives `rules.index` (the rule index file), `batches` (patch files, riskiest
+     first), `risk` (tags per file) and `skippedFiles` (already triaged out: never review
+     them). **Do not read `mr.json`**; the batches contain the patches.
 
 2. **Project context** — `CONTEXT .review-change/mr.json --project "<PROJECT>" --out .review-change/project.json`
    The JSON has `structure` (folders with file counts), `context` (README, CI, config and
@@ -67,15 +72,18 @@ and the report, both in the current working directory.
    data access, UI, config, tests). Read `AGENTS.md`, `CLAUDE.md` or `CONTRIBUTING.md` when
    present: they state the project's own conventions.
 
-4. **Load rules** — read each path in `rules.files` once (keys are rule file ids like
-   `owasp/general.md`, values are the paths to read). Each reviewable file may only cite rules
-   from the ids in its own `ruleFiles`. Use only rules with `status: active`, then apply
-   `rules.overrides` on top of the files: `status: retired` there means never cite the rule,
-   and `severity` there replaces the rule's default.
+4. **Read the rule index** — read `rules.index` once. One line per active rule:
+   `ID severity · title — look-for`, grouped by rule file and language; overrides are
+   already applied. A file may cite only rules from sections whose language is in its
+   `rules:` list. Before citing a rule whose `why`/`fix` you cannot state precisely, run
+   `HELPER rule <ID> [ID…]` — only for rules you will cite.
 
-5. **Review with the project** — for each reviewable file, in batches of about 10: read its
-   patch in `.review-change/mr.json` (`files[].patch`), then the full file from `PROJECT`
-   (see `checkout`). Then use the project to check what the diff alone cannot show:
+5. **Review with the project** — read each `batches[].file` in order. Each file starts with
+   `### path [change · rules: … · risk: …]`; every line with a number is commentable
+   (`N +code` added, `N  code` context), lines without a number were removed. Open the full
+   file from `PROJECT` (see `checkout`) only when the hunks are not enough to judge the
+   change. Spend most effort where `risk` points. Then use the project to check what the
+   diff alone cannot show:
    - **Callers and usages** — when the diff changes or removes a function, method, type,
      route, config key, DB column, event or message field, Grep the project for its users
      and check they still work (arguments, return values, null handling, renamed keys).
@@ -93,8 +101,7 @@ and the report, both in the current working directory.
    For each issue:
    - Report only problems **introduced or made worse by this diff**. Old problems in unchanged
      code are out of scope, even when you see them while reading.
-   - Anchor it to new-side line numbers of the diff (`HELPER lines .review-change/mr.json <path>`
-     prints them). A problem that shows up in an unchanged file (a broken caller, an outdated
+   - Anchor it to the line numbers shown in the batch. A problem that shows up in an unchanged file (a broken caller, an outdated
      test) is anchored to the changed line that causes it; name the affected `path:line` in
      the body. If there is no commentable line for it, make it a general note
      (`"general": true`).
@@ -108,10 +115,13 @@ and the report, both in the current working directory.
      not a direct replacement, omit `suggestion` or set `"dropIn": false`.
    - Do not report the same problem twice; for a repeated pattern report the first occurrence
      and mention the others in its body.
-   - Skip files listed in `skippedFiles`.
    - Severity: use the rule's default unless the concrete case is clearly more or less serious.
 
-6. **Write findings** — save a JSON array to `.review-change/findings.json`:
+6. **Verify, then write findings** — for each candidate, re-read its lines (and the project
+   evidence) and ask: is it really wrong here, not just possibly? would a senior reviewer on
+   this team leave this comment? Drop it if not. Set `confidence`: `high` — certain from the
+   code you read; `medium` — very likely, depends on code you did not read; `low` — a guess
+   (the helper drops these). Save a JSON array to `.review-change/findings.json`:
 
    ```json
    [
@@ -121,6 +131,7 @@ and the report, both in the current working directory.
        "line": 45,
        "ruleId": "CS-001",
        "severity": "major",
+       "confidence": "high",
        "title": "Async void method",
        "body": "Exceptions thrown here can't be caught by callers and will crash the process. Return `Task` instead.",
        "suggestion": "public async Task SaveAsync()\n{\n    await _repo.SaveAsync(order);\n}"
@@ -129,6 +140,7 @@ and the report, both in the current working directory.
        "general": true,
        "path": "src/Orders/OrderService.cs",
        "ruleId": "GEN-011",
+       "confidence": "high",
        "title": "New discount logic has no tests",
        "body": "`tests/Orders/OrderServiceTests.cs` covers only the old flat rate. Please add tests for the 100-unit threshold, including exactly 100."
      }
@@ -143,6 +155,9 @@ and the report, both in the current working directory.
      again. Never "fix" a line number by guessing — re-read the patch, or turn the finding
      into a general note.
    - `unmapped` findings are kept and shown in a separate section; that is fine.
+   - `dropped` lists findings left out for precision (low confidence, or `suggestion`s over
+     the limit of 3, the most confident kept; `--max-suggestions <n>` only if the user asks
+     for more nits).
 
 8. **Render** — `HELPER render .review-change/review.json --out <output-path>`
 
@@ -150,7 +165,7 @@ and the report, both in the current working directory.
    - output path, platform and project path;
    - the `checkout` state (and that changed files were read from the patch when it is not `head`);
    - files reviewed / skipped (with reasons in one line if any);
-   - findings per severity, and the top 3 findings (file:line — rule — title);
+   - findings per severity and how many were dropped, and the top 3 findings (file:line — rule — title);
    - remind that comments are pasted manually: each finding says where to click;
    - if `.review-change/` or the report are not in this repository's `.gitignore`, suggest
      adding them (do not edit `.gitignore` yourself).

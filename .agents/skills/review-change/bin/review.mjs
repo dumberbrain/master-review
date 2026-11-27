@@ -3,15 +3,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CliError, EXIT } from '../lib/errors.mjs';
 import { validateFindings } from '../lib/findings.mjs';
+import { patchBatches, ruleDetails, ruleIndex } from '../lib/digest.mjs';
+import { MAX_SUGGESTIONS } from '../lib/findings.mjs';
 import { buildMr, loadLocalDiff } from '../lib/merge-request.mjs';
 import { renderReview } from '../lib/render.mjs';
-import { describeRuleSet, findProjectConfig, loadRuleSet, ruleSetSummary } from '../lib/rules.mjs';
+import { describeRuleSet, findProjectConfig, loadRuleSet } from '../lib/rules.mjs';
 
 const USAGE = `usage: review.mjs <command> [args]
 
-  parse <file.diff> --out <mr.json> [--platform github|gitlab] [--title <text>] [--config <file>]
+  parse <file.diff> --out <mr.json> [--platform github|gitlab] [--title <text>] [--config <file>] [--batch-chars <n>]
+      also writes rules.md (rule index) and patches/NN.md (numbered patches, riskiest first)
+      next to <mr.json>
+  rule <RULE-ID> [RULE-ID...] [--config <file>]
   lines <mr.json> [path]
-  validate <mr.json> <findings.json> --out <review.json> [--config <file>]
+  validate <mr.json> <findings.json> --out <review.json> [--config <file>] [--max-suggestions <n>]
   render <review.json> --out <review.md>
   rules [--config <file>]
 
@@ -79,13 +84,37 @@ const commands = {
     const mr = { ...buildMr(raw, ruleSet), ruleConfig: ruleSet.projectConfig };
     writeFile(out, JSON.stringify(mr, null, 2));
     const reviewable = mr.files.filter((f) => !f.skipped);
+    const work = path.dirname(out);
+    const rel = (...p) => path.join(work, ...p).replace(/\\/g, '/');
+    const index = ruleIndex(ruleSet, [...new Set(reviewable.flatMap((f) => f.ruleFiles))]);
+    writeFile(rel('rules.md'), index.text);
+    const patchDir = rel('patches');
+    if (fs.existsSync(patchDir)) {
+      for (const name of fs.readdirSync(patchDir)) if (/^\d+\.md$/.test(name)) fs.rmSync(path.join(patchDir, name));
+    }
+    const maxChars = flags['batch-chars'] ? Number(flags['batch-chars']) : undefined;
+    if (maxChars !== undefined && !(maxChars > 0)) throw new CliError('--batch-chars must be a positive number', EXIT.INPUT);
+    const batches = patchBatches(mr.files, ruleSet, maxChars).map((b, i) => {
+      const file = rel('patches', `${String(i + 1).padStart(2, '0')}.md`);
+      writeFile(file, b.text);
+      return { file, files: b.files };
+    });
+    const summary = {
+      config: ruleSet.projectConfig,
+      packs: Object.values(ruleSet.packs).filter((p) => p.enabled).map((p) => p.name),
+      disabledPacks: Object.values(ruleSet.packs).filter((p) => !p.enabled).map((p) => p.name),
+      index: rel('rules.md'),
+      indexedRules: index.rules,
+    };
+    if (Object.keys(ruleSet.overrides).length) summary.overrides = ruleSet.overrides;
     print({
       platform: mr.platform,
       title: mr.title,
       files: mr.files.length,
       skipped: mr.files.length - reviewable.length,
-      rules: ruleSetSummary(ruleSet, reviewable.flatMap((f) => f.ruleFiles)),
-      reviewable: reviewable.map((f) => ({ path: f.path, ruleFiles: f.ruleFiles, lines: ranges(f.validLines) })),
+      rules: summary,
+      batches,
+      risk: Object.fromEntries(reviewable.filter((f) => f.risk.length).map((f) => [f.path, f.risk.join(', ')])),
       skippedFiles: mr.files.filter((f) => f.skipped).map((f) => ({ path: f.path, reason: f.skipped.reason })),
     });
   },
@@ -108,11 +137,14 @@ const commands = {
     const out = need(flags.out, '--out <review.json>');
     // The config recorded at parse time, so parse and validate see the same rules.
     const projectConfig = flags.config ? findProjectConfig(flags.config) : (mr.ruleConfig ?? null);
-    const { invalid, report } = validateFindings(mr, findings, loadRuleSet({ projectConfig }), { mode: 'file' });
+    const maxSuggestions = flags['max-suggestions'] === undefined ? MAX_SUGGESTIONS : Number(flags['max-suggestions']);
+    if (!Number.isInteger(maxSuggestions) || maxSuggestions < 0) throw new CliError('--max-suggestions must be a whole number >= 0', EXIT.INPUT);
+    const { invalid, report } = validateFindings(mr, findings, loadRuleSet({ projectConfig }), { mode: 'file', maxSuggestions });
     const counts = {
       pending: report.findings.filter((f) => f.status === 'pending' && !f.general).length,
       general: report.findings.filter((f) => f.general).length,
       unmapped: report.findings.filter((f) => f.status === 'unmapped').map((f) => ({ path: f.path, line: f.line, ruleId: f.ruleId, error: f.error })),
+      dropped: report.dropped.map((f) => ({ path: f.path, line: f.line, ruleId: f.ruleId, reason: f.dropReason })),
       invalid,
     };
     print(counts);
@@ -121,6 +153,13 @@ const commands = {
       return;
     }
     writeFile(out, JSON.stringify(report, null, 2));
+  },
+
+  rule({ positional, flags }) {
+    if (!positional.length) need(undefined, '<RULE-ID>');
+    const { rules, unknown } = ruleDetails(loadRuleSet({ projectConfig: findProjectConfig(flags.config) }), positional);
+    print(unknown.length ? { rules, unknown } : rules);
+    if (unknown.length) process.exitCode = EXIT.INPUT;
   },
 
   rules({ flags }) {

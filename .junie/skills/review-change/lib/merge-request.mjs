@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { parsePatch } from './diff.mjs';
 import { rulesFor } from './languages.mjs';
+import { triageFile } from './triage.mjs';
 
 // Turns parsed diff files into reviewable files: language, rule files and commentable lines.
 export function buildMr(raw, cfg) {
@@ -14,7 +15,9 @@ export function buildMr(raw, cfg) {
     if (validLines.length === 0) {
       return { ...base, language: r.language, ruleFiles: r.ruleFiles, skipped: { reason: 'no added lines' } };
     }
-    return { ...base, language: r.language, ruleFiles: r.ruleFiles, validLines, hunks };
+    const t = triageFile(f.path, f.patch);
+    if (t.skipped) return { ...base, language: r.language, ruleFiles: r.ruleFiles, skipped: t.skipped };
+    return { ...base, language: r.language, ruleFiles: r.ruleFiles, validLines, hunks, risk: t.risk, score: t.score };
   });
   return { ...raw, files };
 }

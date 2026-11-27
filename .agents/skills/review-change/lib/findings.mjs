@@ -3,6 +3,36 @@ import { codeAt, hunkOf, normalizeCode } from './diff.mjs';
 import { CliError, EXIT } from './errors.mjs';
 import { SEVERITIES } from './rules.mjs';
 
+export const CONFIDENCES = ['high', 'medium', 'low'];
+// Precision first: at most this many `suggestion`-severity findings reach the report.
+export const MAX_SUGGESTIONS = 3;
+
+// Drops what would be noise for the author: low-confidence findings, and nits beyond the cap
+// (the most confident ones, in report order, are kept). Returns { kept, dropped }.
+export function precisionFilter(findings, { maxSuggestions = MAX_SUGGESTIONS } = {}) {
+  const dropped = [];
+  const rank = (f) => CONFIDENCES.indexOf(f.confidence);
+  const confident = [];
+  for (const f of findings) {
+    if (f.confidence === 'low') dropped.push({ ...f, dropReason: 'low confidence' });
+    else confident.push(f);
+  }
+  const nits = confident.filter((f) => f.severity === 'suggestion');
+  const keepNits = new Set(
+    nits
+      .map((f, i) => ({ f, i }))
+      .sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i)
+      .slice(0, Math.max(0, maxSuggestions))
+      .map(({ f }) => f),
+  );
+  const kept = [];
+  for (const f of confident) {
+    if (f.severity === 'suggestion' && !keepNits.has(f)) dropped.push({ ...f, dropReason: `over the limit of ${maxSuggestions} suggestions` });
+    else kept.push(f);
+  }
+  return { kept, dropped };
+}
+
 export function findingKey(ruleId, path, code) {
   return crypto
     .createHash('sha1')
@@ -38,6 +68,8 @@ function checkOne(raw, files, rules) {
   if (rule.status !== 'active') return { error: `rule ${f.ruleId} is retired` };
   f.severity = f.severity ?? rule.severity;
   if (!SEVERITIES.includes(f.severity)) return { error: `invalid severity ${f.severity}` };
+  f.confidence = f.confidence ?? 'medium';
+  if (!CONFIDENCES.includes(f.confidence)) return { error: `invalid confidence ${f.confidence} (use ${CONFIDENCES.join(', ')})` };
   if (f.suggestion !== undefined && f.suggestion !== null && typeof f.suggestion !== 'string') {
     return { error: 'suggestion must be a string' };
   }
@@ -120,7 +152,7 @@ export function publicMr(mr) {
   };
 }
 
-export function validateFindings(mr, findings, rules, { mode = 'file', now = new Date() } = {}) {
+export function validateFindings(mr, findings, rules, { mode = 'file', now = new Date(), maxSuggestions = MAX_SUGGESTIONS } = {}) {
   if (!Array.isArray(findings)) throw new CliError('findings must be a JSON array', EXIT.INPUT);
   const files = new Map(mr.files.map((f) => [f.path, f]));
   const invalid = [];
@@ -130,15 +162,16 @@ export function validateFindings(mr, findings, rules, { mode = 'file', now = new
     if (r.error) invalid.push({ index, error: r.error });
     else valid.push(r.finding);
   });
-  const sorted = sortFindings(mr, valid);
+  const { kept, dropped } = precisionFilter(sortFindings(mr, valid), { maxSuggestions });
   return {
     invalid,
     report: {
       mergeRequest: publicMr(mr),
       reviewedAt: now.toISOString(),
       mode,
-      summary: summarize(mr, sorted),
-      findings: sorted,
+      summary: summarize(mr, kept),
+      findings: kept,
+      dropped,
     },
   };
 }

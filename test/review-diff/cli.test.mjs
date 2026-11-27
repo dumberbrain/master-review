@@ -22,13 +22,15 @@ test('parse → validate → render writes review.md', (t) => {
 
   const parse = runNode(CLI, ['parse', p('in.diff'), '--out', p('mr.json'), '--platform', 'gitlab', '--title', 'Demo'], { cwd: dir });
   assert.equal(parse.status, 0, parse.stderr);
-  assert.deepEqual(parse.json.reviewable, [{ path: 'src/a.js', ruleFiles: [
-      'refactoring-guru/general.md',
-      'owasp/general.md',
-      'refactoring-guru/javascript.md',
-      'patterns-dev/javascript.md',
-      'bulletproof-react/javascript.md',
-    ], lines: '1-2' }]);
+  assert.deepEqual(parse.json.batches, [{ file: path.join(dir, 'patches', '01.md').replace(/\\/g, '/'), files: ['src/a.js'] }]);
+  assert.equal(
+    fs.readFileSync(p('patches/01.md'), 'utf8'),
+    '### src/a.js  [modified · rules: general, javascript]\n@@\n1  const a = 1;\n2 +if (a == "1") run();\n',
+  );
+  const index = fs.readFileSync(p('rules.md'), 'utf8');
+  assert.match(index, /^## patterns-dev\/javascript\.md \(javascript\)$/m);
+  assert.match(index, /^- JS-001 minor · Loose equality — /m);
+  assert.doesNotMatch(index, /\((react|csharp)\)/);
 
   fs.writeFileSync(
     p('findings.json'),
@@ -81,8 +83,9 @@ test('review.config.json in the working directory switches packs off for parse a
   assert.equal(parse.json.rules.config, p('review.config.json'));
   assert.deepEqual(parse.json.rules.disabledPacks, ['patterns-dev']);
   assert.deepEqual(parse.json.rules.overrides, { 'GEN-006': { severity: 'major' } });
-  assert.ok(!parse.json.reviewable[0].ruleFiles.includes('patterns-dev/javascript.md'));
-  assert.equal(parse.json.rules.files['owasp/general.md'], path.join(DIFF_SKILL, 'rules', 'packs', 'owasp', 'general.md'));
+  const index = fs.readFileSync(p('rules.md'), 'utf8');
+  assert.doesNotMatch(index, /patterns-dev/);
+  assert.match(index, /^- GEN-006 major · /m, 'overrides change the indexed severity');
 
   // validate runs from elsewhere: it still uses the config recorded in mr.json.
   fs.writeFileSync(

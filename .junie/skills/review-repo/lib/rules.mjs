@@ -41,11 +41,20 @@ export function parseRuleFile(content, file = '') {
     const line = lines[i];
     const f = FENCE.exec(line);
     if (f) {
-      if (!fence) fence = f[1];
-      else if (line.trim().startsWith(fence) && /^(`+|~+)$/.test(line.trim())) fence = null;
+      if (!fence) {
+        fence = f[1];
+        if (cur && cur.example === undefined) cur.example = [];
+        else if (cur) cur.exampleDone = true;
+      } else if (line.trim().startsWith(fence) && /^(`+|~+)$/.test(line.trim())) {
+        fence = null;
+        if (cur) cur.exampleDone = true;
+      }
       continue;
     }
-    if (fence) continue;
+    if (fence) {
+      if (cur && !cur.exampleDone) cur.example.push(line);
+      continue;
+    }
 
     if (line.startsWith('### ')) {
       const m = RULE_HEADING.exec(line);
@@ -64,6 +73,10 @@ export function parseRuleFile(content, file = '') {
     }
     const fm = cur && FIELD.exec(line);
     if (fm) cur.fields[fm[1]] = fm[2].trim();
+  }
+  for (const r of rules) {
+    r.example = r.example ? r.example.join('\n') : undefined;
+    delete r.exampleDone;
   }
   return { file, front, rules, badHeadings };
 }

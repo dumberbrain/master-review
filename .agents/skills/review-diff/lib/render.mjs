@@ -112,6 +112,10 @@ export function renderReview(report) {
     `- Files reviewed: ${s.filesReviewed} · skipped: ${s.filesSkipped.length}`,
     `- Findings: ${SEVERITIES.map((k) => `${k} ${s.bySeverity[k] ?? 0}`).join(' · ')}`,
   ];
+  if (report.dropped?.length) {
+    const low = report.dropped.filter((f) => f.confidence === 'low').length;
+    out.push(`- Left out to keep the review precise: ${low} low-confidence · ${report.dropped.length - low} extra suggestions`);
+  }
   if (report.mode === 'post') {
     const b = s.byStatus ?? {};
     out.push(

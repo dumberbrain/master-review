@@ -1,0 +1,878 @@
+diff --git a/src/app/layout/Header.tsx b/src/app/layout/Header.tsx
+index 3afc0d141e96c31412639433c46c625c9c803fdd..a4a49c0f1e74a39ca5039939ea0e70ecb7bed3ec 100644
+--- a/src/app/layout/Header.tsx
++++ b/src/app/layout/Header.tsx
+@@ -3,9 +3,11 @@ import { UserIcon } from '@cbar/lib-react-ui-kit/icons'
+ import { useTranslation } from 'react-i18next'
+ import { Link, useLocation } from 'react-router-dom'
+ 
++import { authService } from '@/services/auth/authService'
+ import emblem from '@/shared/assets/cbar-emblem.svg'
+ import logoAz from '@/shared/assets/cbar-logo-az.svg'
+ import logoEn from '@/shared/assets/cbar-logo-en.svg'
++import { useAsync } from '@/shared/hooks/useAsync'
+ import { useLocale, useLocalePath } from '@/shared/hooks/useLocale'
+ import { LOCALES, type Locale } from '@/shared/types'
+ 
+@@ -68,13 +70,19 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
+ 
+ /**
+  * The public portal's bar, shaped like the cabinet's top bar. It carries only
+- * what every visitor needs: the mark, the language and the way into the cabinet.
++ * what every visitor needs: the mark, the language and the way into the cabinet,
++ * which wears the person's name once they are signed in.
+  * Services open through the cabinet and the secondary pages sit in the footer,
+  * so there is no link row here.
+  */
+ export function Header() {
+   const { t } = useTranslation()
++  const locale = useLocale()
+   const localePath = useLocalePath()
++  // Until it resolves, and for a visitor without a session, the bar offers the way in.
++  const { data: session } = useAsync(() => authService.getSession(), [])
++  const user = session?.user
++  const userName = user && ((locale === 'en' && user.displayNameEn) || user.displayName)
+ 
+   return (
+     <header className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur">
+@@ -92,12 +100,26 @@ export function Header() {
+            * The way into the Personal Cabinet. Without a session the cabinet sends
+            * the visitor on to `/login` and back. On a phone only
+            * the glyph shows, so the label moves to `aria-label`.
++           *
++           * Signed in, it carries the person's name instead. The link is named by
++           * its own text, so the name always holds what is on screen; on a phone
++           * the name is read out but not shown.
+            */}
+           <Button asChild size="sm">
+-            <Link to={localePath('/cabinet')} aria-label={t('nav.cabinet')}>
+-              <UserIcon aria-hidden="true" />
+-              <span className="hidden sm:inline">{t('nav.cabinet')}</span>
+-            </Link>
++            {userName ? (
++              <Link to={localePath('/cabinet')}>
++                <UserIcon aria-hidden="true" />
++                <span className="sr-only">{t('cabinet.shortTitle')}:</span>{' '}
++                <span className="sr-only sm:not-sr-only">
++                  <span className="inline-block max-w-48 truncate align-bottom">{userName}</span>
++                </span>
++              </Link>
++            ) : (
++              <Link to={localePath('/cabinet')} aria-label={t('nav.cabinet')}>
++                <UserIcon aria-hidden="true" />
++                <span className="hidden sm:inline">{t('nav.cabinet')}</span>
++              </Link>
++            )}
+           </Button>
+         </div>
+       </div>
+diff --git a/src/app/providers/SessionProvider.tsx b/src/app/providers/SessionProvider.tsx
+index 2987a5fbffb3689ed0f80d6e0184b6ac96b1e8c8..317ee8d1bb4123783c5ec62bd6ef163933e2f934 100644
+--- a/src/app/providers/SessionProvider.tsx
++++ b/src/app/providers/SessionProvider.tsx
+@@ -8,7 +8,8 @@ import { useAsync } from '@/shared/hooks/useAsync'
+ /**
+  * Resolves the session once for the whole cabinet — the sidebar and the profile
+  * page read the same result instead of asking twice. Mounted by `CabinetLayout`
+- * rather than by `AppShell`: the public portal has no use for a session.
++ * rather than by `AppShell`: the public portal only names the person in its header,
++ * which asks for the session itself.
+  *
+  * It also listens for a failed refresh: any cabinet call can be the one that finds
+  * the session gone, and the cabinet has to leave from wherever the user is.
+diff --git a/src/features/auth/LoginPage.tsx b/src/features/auth/LoginPage.tsx
+index 9e7d16169227607df430ea10dd47af69c06a07eb..07fe8f4f30898cad9ec23d75635f4063babe0473 100644
+--- a/src/features/auth/LoginPage.tsx
++++ b/src/features/auth/LoginPage.tsx
+@@ -8,13 +8,18 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+ 
+ import { MygovIdButton } from '@/features/auth/MygovIdButton'
+ import { authService } from '@/services/auth/authService'
+-import emblem from '@/shared/assets/cbar-emblem.svg'
++import logoAz from '@/shared/assets/cbar-logo-stacked-az.png'
++import logoEn from '@/shared/assets/cbar-logo-stacked-en.png'
+ import { LoadingState } from '@/shared/components/States'
+ import { getAppConfig } from '@/shared/config/appConfig'
+ import { useAsync } from '@/shared/hooks/useAsync'
+ import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle'
+-import { useLocalePath } from '@/shared/hooks/useLocale'
++import { useLocale, useLocalePath } from '@/shared/hooks/useLocale'
+ import { safeReturnPath } from '@/shared/lib/returnPath'
++import type { Locale } from '@/shared/types'
++
++/** The Central Bank's mark as it is set above a centred block: the emblem over the name. */
++const BRAND_LOGOS: Record<Locale, string> = { az: logoAz, en: logoEn }
+ 
+ /** Where to land after login (only an in-app path is honoured) and why the user is here. */
+ function useLoginState(fallback: string): { returnTo: string; failed: boolean; expired: boolean } {
+@@ -40,6 +45,7 @@ function useLoginState(fallback: string): { returnTo: string; failed: boolean; e
+ export function LoginPage() {
+   const { t } = useTranslation()
+   useDocumentTitle(t('login.title'))
++  const locale = useLocale()
+   const localePath = useLocalePath()
+   const navigate = useNavigate()
+   const { returnTo, failed: returnedFailed, expired } = useLoginState(localePath('/cabinet'))
+@@ -78,7 +84,11 @@ export function LoginPage() {
+     <div className="bg-muted/40 flex items-center justify-center px-4 py-16 sm:py-24">
+       <Card className="bg-background w-full max-w-md">
+         <CardContent className="flex flex-col items-center gap-6 py-4 text-center">
+-          <img src={emblem} alt="" className="h-16 w-auto dark:brightness-0 dark:invert" />
++          <img
++            src={BRAND_LOGOS[locale]}
++            alt={t('app.bank')}
++            className="h-28 w-auto dark:brightness-0 dark:invert"
++          />
+ 
+           <div className="space-y-2">
+             <h1 className="text-2xl font-bold tracking-tight">{t('login.title')}</h1>
+diff --git a/src/features/profile/ProfilePage.tsx b/src/features/profile/ProfilePage.tsx
+index 13a3f6f2675e542b8eccede4886f06b601599a11..50bba138b4ef57188d68604060e180de41b42666 100644
+--- a/src/features/profile/ProfilePage.tsx
++++ b/src/features/profile/ProfilePage.tsx
+@@ -1,9 +1,15 @@
+-import { Avatar, AvatarFallback } from '@cbar/lib-react-ui-kit/avatar'
++import { Avatar, AvatarFallback, AvatarImage } from '@cbar/lib-react-ui-kit/avatar'
+ import { Button } from '@cbar/lib-react-ui-kit/button'
+-import { Card, CardContent, CardHeader, CardTitle } from '@cbar/lib-react-ui-kit/card'
++import {
++  Card,
++  CardContent,
++  CardDescription,
++  CardHeader,
++  CardTitle,
++} from '@cbar/lib-react-ui-kit/card'
+ import { BankIcon, EnvelopeIcon, UserIcon } from '@cbar/lib-react-ui-kit/icons'
+ import type { CbarIconProps } from '@cbar/lib-react-ui-kit/icons'
+-import { Field, FieldDescription, FieldError, FieldLabel } from '@cbar/lib-react-ui-kit/field'
++import { Field, FieldError, FieldLabel } from '@cbar/lib-react-ui-kit/field'
+ import { Input } from '@cbar/lib-react-ui-kit/input'
+ import { toast } from '@cbar/lib-react-ui-kit/toast'
+ import type { TFunction } from 'i18next'
+@@ -16,56 +22,47 @@ import { activeProfileOf, type UserSession } from '@/services/auth/authService'
+ import { ApiError } from '@/shared/api/apiClient'
+ import { initialsOf, maskFin } from '@/shared/lib/format'
+ 
+-interface ReadOnlyFieldProps {
+-  label: string
+-  value: string
+-  hint?: string
+-}
+-
+-/**
+- * A profile row. `readOnly` rather than `disabled`: the value stays fully legible and
+- * can be focused, selected and copied. Muted and without a caret, so it does not read
+- * as a field to fill in.
+- */
+-function ReadOnlyField({ label, value, hint }: ReadOnlyFieldProps) {
+-  const id = useId()
+-
++/** What mygov ID or the registry says about the person: a label beside its value, not a field. */
++function ProfileRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+   return (
+-    <Field>
+-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+-      <Input
+-        id={id}
+-        value={value}
+-        readOnly
+-        aria-readonly="true"
+-        className="bg-muted dark:bg-muted cursor-default caret-transparent"
+-      />
+-      {hint ? <FieldDescription>{hint}</FieldDescription> : null}
+-    </Field>
++    <div className="flex flex-col gap-1 border-t py-3.5 text-sm leading-normal sm:flex-row sm:gap-4">
++      <dt className="text-muted-foreground sm:w-31 sm:shrink-0">{label}</dt>
++      <dd className="min-w-0 flex-1 font-medium break-words">
++        {value || '—'}
++        {hint ? <p className="text-muted-foreground mt-0.5 text-xs font-normal">{hint}</p> : null}
++      </dd>
++    </div>
+   )
+ }
+ 
+ /** A white panel with a glyph beside its title — one per kind of information. */
+ function ProfileSection({
+   title,
++  description,
+   Icon,
+   children,
+ }: {
+   title: string
++  description?: string
+   Icon: ComponentType<CbarIconProps>
+   children: ReactNode
+ }) {
+   return (
+-    <Card className="bg-background">
+-      <CardHeader>
+-        <CardTitle className="flex items-center gap-3 text-base">
+-          <span className="bg-accent text-accent-foreground flex size-9 items-center justify-center rounded-lg">
++    <Card className="bg-background gap-5 py-4 sm:py-6">
++      <CardHeader className="gap-0 px-4 sm:px-6">
++        <div className="flex items-center gap-3">
++          <span className="bg-accent text-accent-foreground flex size-9 shrink-0 items-center justify-center rounded-lg">
+             <Icon size={18} aria-hidden="true" />
+           </span>
+-          {title}
+-        </CardTitle>
++          <div className="min-w-0 space-y-0.5">
++            <CardTitle className="text-base leading-tight">{title}</CardTitle>
++            {description ? (
++              <CardDescription className="text-xs">{description}</CardDescription>
++            ) : null}
++          </div>
++        </div>
+       </CardHeader>
+-      <CardContent>{children}</CardContent>
++      <CardContent className="px-4 sm:px-6">{children}</CardContent>
+     </Card>
+   )
+ }
+@@ -89,9 +86,23 @@ function contactFieldErrors(error: unknown, t: TFunction): Partial<Record<Contac
+   )
+ }
+ 
++/** Every number is Azerbaijani: the field shows the code and takes the rest. */
++const PHONE_CODE = '+994'
++
++/** The part of a saved number that follows the country code. */
++function localPhone(phone: string | undefined): string {
++  return (phone ?? '').replace(/^\+?994/, '')
++}
++
++/** `+994501234567`, as the Identity Service takes it; `''` when nothing is typed. */
++function fullPhone(local: string): string {
++  const digits = local.replace(/\s/g, '')
++  return digits ? `${PHONE_CODE}${digits}` : ''
++}
++
+ /**
+  * The contact details the person keeps themself, as `GET me` has them (`contact`).
+- * Editable, unlike the mygov identity above; saved with the Identity Service's `PUT me`.
++ * Editable, unlike the mygov identity beside it; saved with the Identity Service's `PUT me`.
+  */
+ function ContactForm({ user }: { user: UserSession['user'] }) {
+   const { t } = useTranslation()
+@@ -99,12 +110,13 @@ function ContactForm({ user }: { user: UserSession['user'] }) {
+   const emailId = useId()
+   const phoneId = useId()
+   const [email, setEmail] = useState(user.email ?? '')
+-  const [phone, setPhone] = useState(user.phone ?? '')
++  const [phone, setPhone] = useState(localPhone(user.phone))
+   const [isSaving, setIsSaving] = useState(false)
+   const [errors, setErrors] = useState<Partial<Record<ContactField, string>>>({})
+ 
+-  const contact = { email: email.trim(), phone: phone.trim() }
+-  const changed = contact.email !== (user.email ?? '') || contact.phone !== (user.phone ?? '')
++  const contact = { email: email.trim(), phone: fullPhone(phone) }
++  const changed =
++    contact.email !== (user.email ?? '') || contact.phone !== fullPhone(localPhone(user.phone))
+ 
+   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+     event.preventDefault()
+@@ -114,7 +126,7 @@ function ContactForm({ user }: { user: UserSession['user'] }) {
+       .then(
+         (session) => {
+           setEmail(session.user.email ?? '')
+-          setPhone(session.user.phone ?? '')
++          setPhone(localPhone(session.user.phone))
+           toast.success(t('cabinet.profile.saved'))
+         },
+         (error: unknown) => {
+@@ -126,40 +138,68 @@ function ContactForm({ user }: { user: UserSession['user'] }) {
+       .finally(() => setIsSaving(false))
+   }
+ 
++  function handleCancel() {
++    setEmail(user.email ?? '')
++    setPhone(localPhone(user.phone))
++    setErrors({})
++  }
++
+   return (
+-    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+-      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+-        <Field invalid={Boolean(errors.email)}>
+-          <FieldLabel htmlFor={emailId}>{t('cabinet.profile.email')}</FieldLabel>
+-          <Input
+-            id={emailId}
+-            type="email"
+-            autoComplete="email"
+-            value={email}
+-            aria-invalid={errors.email ? true : undefined}
+-            aria-describedby={errors.email ? `${emailId}-error` : undefined}
+-            onChange={(event) => setEmail(event.target.value)}
+-          />
+-          {errors.email ? <FieldError id={`${emailId}-error`}>{errors.email}</FieldError> : null}
+-        </Field>
+-        <Field invalid={Boolean(errors.phone)}>
+-          <FieldLabel htmlFor={phoneId}>{t('cabinet.profile.phone')}</FieldLabel>
+-          <Input
+-            id={phoneId}
+-            type="tel"
+-            autoComplete="tel"
+-            placeholder="+994XXXXXXXXX"
+-            value={phone}
+-            aria-invalid={errors.phone ? true : undefined}
+-            aria-describedby={errors.phone ? `${phoneId}-error` : undefined}
+-            onChange={(event) => setPhone(event.target.value)}
+-          />
+-          {errors.phone ? <FieldError id={`${phoneId}-error`}>{errors.phone}</FieldError> : null}
+-        </Field>
++    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
++      <Field invalid={Boolean(errors.email)}>
++        <FieldLabel htmlFor={emailId}>{t('cabinet.profile.email')}</FieldLabel>
++        <Input
++          id={emailId}
++          type="email"
++          autoComplete="email"
++          placeholder={t('cabinet.profile.emailPlaceholder')}
++          value={email}
++          aria-invalid={errors.email ? true : undefined}
++          aria-describedby={errors.email ? `${emailId}-error` : undefined}
++          onChange={(event) => setEmail(event.target.value)}
++        />
++        {errors.email ? <FieldError id={`${emailId}-error`}>{errors.email}</FieldError> : null}
++      </Field>
++      <Field invalid={Boolean(errors.phone)}>
++        <FieldLabel htmlFor={phoneId}>{t('cabinet.profile.phone')}</FieldLabel>
++        <Input
++          id={phoneId}
++          type="tel"
++          autoComplete="tel-national"
++          placeholder="50 123 45 67"
++          value={phone}
++          aria-invalid={errors.phone ? true : undefined}
++          aria-describedby={errors.phone ? `${phoneId}-error` : undefined}
++          onChange={(event) => setPhone(event.target.value)}
++          /*
++           * The code is a grey cell at the field's left edge. It is as tall as the
++           * field, so the box clips it to its own border and corners.
++           */
++          startElement={
++            <span className="bg-muted text-foreground flex h-11 items-center border-r px-3">
++              {PHONE_CODE}
++            </span>
++          }
++          className="overflow-hidden ps-0"
++        />
++        {errors.phone ? <FieldError id={`${phoneId}-error`}>{errors.phone}</FieldError> : null}
++      </Field>
++      {/* On a phone the two share the row; from there up they sit at its end. */}
++      <div className="flex gap-3 pt-4 sm:justify-end">
++        <Button
++          type="button"
++          variant="outline"
++          colorPalette="black"
++          disabled={!changed || isSaving}
++          onClick={handleCancel}
++          className="flex-1 sm:flex-none"
++        >
++          {t('cabinet.profile.cancel')}
++        </Button>
++        <Button type="submit" disabled={!changed || isSaving} className="flex-1 sm:flex-none">
++          {t('cabinet.profile.save')}
++        </Button>
+       </div>
+-      <Button type="submit" disabled={!changed || isSaving}>
+-        {t('cabinet.profile.save')}
+-      </Button>
+     </form>
+   )
+ }
+@@ -172,64 +212,68 @@ export function ProfilePage() {
+   if (!session) return null
+   const { user } = session
+   const activeProfile = activeProfileOf(session)
++  const fullName = [user.displayName, user.fatherName].filter(Boolean).join(' ')
+ 
+   return (
+-    <section aria-labelledby="cabinet-profile-heading" className="space-y-6">
+-      <CabinetPageHeader
+-        id="cabinet-profile-heading"
+-        title={t('cabinet.profile.title')}
+-        description={t('cabinet.navDescription.profile')}
+-      />
+-
+-      {/* Who this is, once: the mygov photo whole, uncropped (initials when it has none), and the name. */}
+-      <div className="bg-background flex items-center gap-4 rounded-2xl border p-5">
+-        {user.photo ? (
+-          <img src={user.photo} alt="" className="h-32 shrink-0 rounded-md" />
+-        ) : (
+-          <Avatar size="xl">
++    <section
++      aria-labelledby="cabinet-profile-heading"
++      className="space-y-4 md:space-y-5 xl:space-y-6"
++    >
++      <CabinetPageHeader id="cabinet-profile-heading" title={t('cabinet.nav.profile')} />
++
++      {/*
++       * Who this is, once: the mygov photo (initials when it has none) set on the band,
++       * and the name — beside the photo, or under it on a phone.
++       */}
++      <div className="bg-background overflow-hidden rounded-xl border">
++        <div className="bg-primary h-22" />
++        <div className="relative px-4 pt-12 pb-5 sm:pt-4 sm:pr-7 sm:pb-6 sm:pl-39">
++          <Avatar
++            shape="square"
++            variant="subtle"
++            colorPalette="primary"
++            className="absolute -top-9.25 left-3.75 size-18 rounded-xl text-2xl sm:-top-13.25 sm:left-6.75 sm:size-26 sm:rounded-2xl sm:text-3xl"
++          >
++            {user.photo ? <AvatarImage src={user.photo} alt="" className="object-cover" /> : null}
+             <AvatarFallback>{initialsOf(user.displayName)}</AvatarFallback>
+           </Avatar>
+-        )}
+-        <div className="min-w-0">
+-          <p className="truncate text-lg font-semibold">
+-            {[user.displayName, user.fatherName].filter(Boolean).join(' ')}
+-          </p>
+-          <p className="text-muted-foreground text-sm">
+-            {t(`cabinet.profileKind.${activeProfile.kind}`)}
+-          </p>
++          <p className="text-xl leading-tight font-bold break-words">{fullName}</p>
+         </div>
+       </div>
+ 
+-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
++      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 xl:gap-6">
+         <ProfileSection title={t('cabinet.profile.identity')} Icon={UserIcon}>
+-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
++          <dl>
++            <ProfileRow label={t('cabinet.profile.fullName')} value={fullName} />
+             {user.fin ? (
+-              <ReadOnlyField
++              <ProfileRow
+                 label={t('cabinet.profile.fin')}
+                 value={maskFin(user.fin)}
+                 hint={t('cabinet.profile.finHint')}
+               />
+             ) : null}
+-            {user.tin ? <ReadOnlyField label={t('cabinet.tin')} value={user.tin} /> : null}
+-            <div className="sm:col-span-2">
+-              <ReadOnlyField label={t('cabinet.profile.address')} value={user.address ?? ''} />
+-            </div>
+-          </div>
++            {user.tin ? <ProfileRow label={t('cabinet.tin')} value={user.tin} /> : null}
++            <ProfileRow label={t('cabinet.profile.address')} value={user.address ?? ''} />
++          </dl>
+         </ProfileSection>
+ 
+-        <ProfileSection title={t('cabinet.profile.contact')} Icon={EnvelopeIcon}>
++        <ProfileSection
++          title={t('cabinet.profile.contact')}
++          description={t('cabinet.profile.contactHint')}
++          Icon={EnvelopeIcon}
++        >
+           <ContactForm user={user} />
+         </ProfileSection>
+ 
+         {activeProfile.kind !== 'individual' ? (
+           <ProfileSection title={t('cabinet.profile.organization')} Icon={BankIcon}>
+-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+-              <ReadOnlyField
++            <dl>
++              <ProfileRow
+                 label={t('cabinet.profile.organizationName')}
+                 value={activeProfile.name}
+               />
+-              <ReadOnlyField label={t('cabinet.tin')} value={activeProfile.tin ?? ''} />
+-            </div>
++              <ProfileRow label={t('cabinet.tin')} value={activeProfile.tin ?? ''} />
++            </dl>
+           </ProfileSection>
+         ) : null}
+       </div>
+diff --git a/src/features/search/SiteSearchForm.tsx b/src/features/search/SiteSearchForm.tsx
+index 53f94cbe66eda5e09bb01c1a6f4b3c3ceac28b6d..03a890c92040a3a276baddfceeb720769d7015c3 100644
+--- a/src/features/search/SiteSearchForm.tsx
++++ b/src/features/search/SiteSearchForm.tsx
+@@ -53,10 +53,12 @@ export function SiteSearchForm({
+         size="lg"
+         defaultValue={defaultValue}
+         placeholder={t('search.placeholder')}
+-        startElement={<SearchIcon size={onBrand ? 20 : 18} />}
++        /* In the hero the glyph sits on the button, so the field opens with the hint. */
++        startElement={onBrand ? undefined : <SearchIcon size={18} />}
+         endElement={
+           onBrand ? (
+-            <Button type="submit" className="me-1.5">
++            <Button type="submit" size="lg" className="h-11 rounded-sm">
++              <SearchIcon aria-hidden="true" className="size-4.5" />
+               {t('search.submit')}
+             </Button>
+           ) : undefined
+@@ -64,7 +66,7 @@ export function SiteSearchForm({
+         /* With an adornment, `className` sizes the wrapper — the visible box. */
+         className={
+           onBrand
+-            ? 'bg-background text-foreground h-14 rounded-xl border-transparent shadow-lg'
++            ? 'bg-background text-foreground h-14 gap-3 rounded-lg border-transparent ps-5 pe-1.5 shadow-lg'
+             : 'bg-background text-foreground'
+         }
+       />
+diff --git a/src/features/services/accr/InquiriesPage.tsx b/src/features/services/accr/InquiriesPage.tsx
+index 3e96fb31bfba2026174011e1c321c7a8f160b040..2c9ac70da5e1f19a42b4ba6c2b538d77bed50c0c 100644
+--- a/src/features/services/accr/InquiriesPage.tsx
++++ b/src/features/services/accr/InquiriesPage.tsx
+@@ -140,6 +140,8 @@ export function InquiriesPage() {
+             value={range}
+             onChange={setRange}
+             format="dd.MM.yyyy"
++            // The hint a person reads; `MM` is only the pattern's token for the month.
++            placeholder="dd.mm.yyyy"
+             locale={locale === 'az' ? 'az-AZ' : 'en-GB'}
+             labels={[t('reports.from'), t('reports.to')]}
+             className="w-72"
+diff --git a/src/locales/az/common.json b/src/locales/az/common.json
+index 48a9e9b1e37d42eb272a09c7545a6a83c5163803..24b5ab4f1ae12049159488fd73900a879ade3604 100644
+--- a/src/locales/az/common.json
++++ b/src/locales/az/common.json
+@@ -50,7 +50,7 @@
+     "title": "Axtarış",
+     "label": "Saytda axtar",
+     "submit": "Axtar",
+-    "placeholder": "Xidmət, xəbər, sual və ya sorğu",
++    "placeholder": "Xidmət, sual və ya sorğu daxil edin",
+     "prompt": "Axtarmaq üçün söz daxil edin.",
+     "empty": "Axtarışa uyğun nəticə tapılmadı.",
+     "resultCount_one": "{{count}} nəticə tapıldı",
+@@ -95,7 +95,7 @@
+     }
+   },
+   "contact": {
+-    "title": "ELEKTRON MÜRACİƏT",
++    "title": "ƏLAQƏ",
+     "generalInfo": "ÜMUMİ MƏLUMAT",
+     "contactInfo": "ƏLAQƏ",
+     "hotline": "Qaynar xətt",
+@@ -152,11 +152,14 @@
+       "clearSearch": "Axtarışı təmizlə"
+     },
+     "profile": {
+-      "title": "Profil",
+       "identity": "Şəxsi məlumatlar",
++      "fullName": "Ad, soyad, ata adı",
+       "contact": "Əlaqə məlumatları",
++      "contactHint": "Bildirişlər və müraciət statusları bu ünvanlara göndəriləcək",
+       "email": "E-poçt",
+-      "phone": "Telefon",
++      "emailPlaceholder": "ad@nümunə.az",
++      "phone": "Mobil telefon",
++      "cancel": "Ləğv et",
+       "save": "Yadda saxla",
+       "saved": "Əlaqə məlumatları yadda saxlanıldı",
+       "errors": {
+diff --git a/src/locales/en/common.json b/src/locales/en/common.json
+index 814b8073248c5300f591ebc839a5c6aa630bbeb1..a1c525d940111db5174b6c77601b4e622da039f1 100644
+--- a/src/locales/en/common.json
++++ b/src/locales/en/common.json
+@@ -46,7 +46,7 @@
+     "title": "Search",
+     "label": "Search the site",
+     "submit": "Search",
+-    "placeholder": "Service, news, question or survey",
++    "placeholder": "Enter a service, question or survey",
+     "prompt": "Enter a word to search for.",
+     "empty": "Nothing matches your search.",
+     "resultCount_one": "{{count}} result found",
+@@ -95,7 +95,7 @@
+     }
+   },
+   "contact": {
+-    "title": "ELECTRONIC APPEAL",
++    "title": "CONTACT",
+     "generalInfo": "GENERAL INFORMATION",
+     "contactInfo": "CONTACT",
+     "hotline": "Hotline",
+@@ -152,11 +152,14 @@
+       "clearSearch": "Clear search"
+     },
+     "profile": {
+-      "title": "Profile",
+       "identity": "Personal details",
++      "fullName": "Name, surname, patronymic",
+       "contact": "Contact details",
++      "contactHint": "Notifications and appeal statuses are sent to these addresses",
+       "email": "Email",
+-      "phone": "Phone",
++      "emailPlaceholder": "name@example.com",
++      "phone": "Mobile phone",
++      "cancel": "Cancel",
+       "save": "Save",
+       "saved": "Contact details saved",
+       "errors": {
+diff --git a/src/shared/assets/cbar-logo-stacked-az.png b/src/shared/assets/cbar-logo-stacked-az.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..f2f6221c34efc615242250f34a099a9b240b0c8a
+Binary files /dev/null and b/src/shared/assets/cbar-logo-stacked-az.png differ
+diff --git a/src/shared/assets/cbar-logo-stacked-en.png b/src/shared/assets/cbar-logo-stacked-en.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..7dad0050e3b675f5e4f7300e6e00c2fe539a45bc
+Binary files /dev/null and b/src/shared/assets/cbar-logo-stacked-en.png differ
+diff --git a/src/shared/components/Crumbs.tsx b/src/shared/components/Crumbs.tsx
+index cbd8df03388cf5ed65c6475c5f2a845993a2162d..75b4e7742d170734197204bba44f3abbe4e579e8 100644
+--- a/src/shared/components/Crumbs.tsx
++++ b/src/shared/components/Crumbs.tsx
+@@ -17,6 +17,12 @@ export interface Crumb {
+   to?: string
+ }
+ 
++/**
++ * The kit pads every crumb like a button. The design sets the crumbs 4px apart,
++ * which is the list's own gap, so the padding goes.
++ */
++const CRUMB = 'group-data-[size=xs]/breadcrumb-list:px-0'
++
+ /**
+  * Home is always the first crumb — the portal's, unless `home` names another
+  * (the cabinet starts at its own dashboard). `items` are the rest, last one
+@@ -29,7 +35,7 @@ export function Crumbs({ items, home }: { items: Crumb[]; home?: Required<Crumb>
+   return (
+     <Breadcrumb>
+       <BreadcrumbList size="xs">
+-        <BreadcrumbItem>
++        <BreadcrumbItem className={CRUMB}>
+           <BreadcrumbLink asChild>
+             <Link to={home?.to ?? localePath('/')}>
+               {home?.label ?? t('common.breadcrumbHome')}
+@@ -41,7 +47,7 @@ export function Crumbs({ items, home }: { items: Crumb[]; home?: Required<Crumb>
+           return (
+             <Fragment key={`${item.label}-${index}`}>
+               <BreadcrumbSeparator />
+-              <BreadcrumbItem>
++              <BreadcrumbItem className={CRUMB}>
+                 {isLast || !item.to ? (
+                   <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                 ) : (
+diff --git a/src/test/accrService.test.tsx b/src/test/accrService.test.tsx
+index b009c57f33e290dab0b53466a3b36d0477db8802..7c8bcfbd5678ff4f6b5a201bfe19481cc31633b2 100644
+--- a/src/test/accrService.test.tsx
++++ b/src/test/accrService.test.tsx
+@@ -265,6 +265,8 @@ describe('Mərkəzləşdirilmiş kredit reyestri sistemi', () => {
+     const table = await screen.findByRole('table', { name: 'Çıxarışlarım' })
+     // 25 rows a page, each with its link.
+     await waitFor(() => expect(within(table).getAllByRole('link')).toHaveLength(25))
++    // Both ends of the period hint the date in lower case.
++    expect(screen.getAllByPlaceholderText('dd.mm.yyyy')).toHaveLength(2)
+ 
+     await user.click(screen.getByRole('link', { name: '2' }))
+     await waitFor(() =>
+diff --git a/src/test/cabinet.test.tsx b/src/test/cabinet.test.tsx
+index 312850a399355e53be159d9b2efdeddffb4bb76e..7ee30fb2ff3721c793efc66895606db503938353 100644
+--- a/src/test/cabinet.test.tsx
++++ b/src/test/cabinet.test.tsx
+@@ -217,11 +217,13 @@ describe('personal cabinet', () => {
+   it('renders the profile with the FIN masked', async () => {
+     renderRoute('/az/cabinet/profile')
+ 
+-    expect(await screen.findByLabelText('FİN')).toHaveValue('5X••••M')
+-    // The name is in the profile card, not repeated as a field; the top bar shows it too.
+-    expect(screen.getAllByText('Aygün Bərxudarova').length).toBeGreaterThan(1)
+-    expect(screen.queryByLabelText('Ad, soyad')).not.toBeInTheDocument()
+-    expect(screen.getByLabelText('Ünvan')).toHaveValue(
++    expect((await screen.findByText('FİN')).nextElementSibling).toHaveTextContent('5X••••M')
++    // The name heads the profile card and has its own row; the top bar shows it too.
++    expect(screen.getAllByText('Aygün Bərxudarova').length).toBeGreaterThan(2)
++    expect(screen.getByText('Ad, soyad, ata adı').nextElementSibling).toHaveTextContent(
++      'Aygün Bərxudarova',
++    )
++    expect(screen.getByText('Ünvan').nextElementSibling).toHaveTextContent(
+       'Bakı şəhəri, Nəsimi rayonu, R. Behbudov küç. 32, mənzil 14',
+     )
+     // No photo in the demo session: the initials stand in.
+@@ -274,7 +276,7 @@ describe('personal cabinet', () => {
+     const user = userEvent.setup()
+     renderRoute('/az')
+ 
+-    await user.click(await screen.findByRole('link', { name: /Şəxsi kabinetə daxil ol/ }))
++    await user.click(await screen.findByRole('link', { name: 'Şəxsi kabinet: Aygün Bərxudarova' }))
+     expect(await screen.findByRole('heading', { name: 'Xidmətlər', level: 1 })).toBeVisible()
+   })
+ 
+diff --git a/src/test/login.test.tsx b/src/test/login.test.tsx
+index 33c20eb7936d96de03a591d7d8968b516894b9d9..40e979bdd99fd9ea4bffa459f405fa72026f69ae 100644
+--- a/src/test/login.test.tsx
++++ b/src/test/login.test.tsx
+@@ -31,7 +31,7 @@ describe('mygov login (demo)', () => {
+ 
+     await user.click(await screen.findByRole('button', { name: 'mygov ID ilə daxil ol' }))
+ 
+-    expect(await screen.findByLabelText('FİN')).toHaveValue('5X••••M')
++    expect(await screen.findByText('5X••••M')).toBeVisible()
+     expect(window.sessionStorage.getItem(DEMO_SIGNED_IN_KEY)).toBe('1')
+   })
+ 
+diff --git a/src/test/mygovLogin.test.tsx b/src/test/mygovLogin.test.tsx
+index 0700854c8c7d51705f2d2008ed7ae62b277af1a4..0c4ed9bc980c4df5939d7d92eafcf500588f2e8f 100644
+--- a/src/test/mygovLogin.test.tsx
++++ b/src/test/mygovLogin.test.tsx
+@@ -154,24 +154,24 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     renderRoute('/en/cabinet/profile')
+ 
+     expect(await screen.findByRole('button', { name: /Test Istifadachi/ })).toBeVisible()
+-    // The profile page keeps the name as mygov ID has it.
+-    expect(await screen.findByText('Test İstifadəçi Rəşid')).toBeVisible()
++    // The profile page keeps the name as mygov ID has it: on its card and in its row.
++    expect(await screen.findAllByText('Test İstifadəçi Rəşid')).toHaveLength(2)
+   })
+ 
+   it('shows the person from GET me on the profile page, the FIN masked', async () => {
+     identity({ '/identity/auth/me': () => ok(me) })
+     renderRoute('/az/cabinet/profile')
+ 
+-    expect(await screen.findByLabelText('FİN')).toHaveValue('5A••••D')
++    expect((await screen.findByText('FİN')).nextElementSibling).toHaveTextContent('5A••••D')
+     // The father's name follows the name on the profile; the top bar keeps the name alone.
+-    expect(screen.getByText('Test İstifadəçi Rəşid')).toBeVisible()
++    expect(screen.getAllByText('Test İstifadəçi Rəşid')).toHaveLength(2)
+     expect(screen.getByRole('button', { name: /Test İstifadəçi/ })).not.toHaveTextContent('Rəşid')
+-    expect(screen.getByLabelText('VÖEN')).toHaveValue('1234567891')
++    expect(screen.getByText('VÖEN').nextElementSibling).toHaveTextContent('1234567891')
+     // Not set yet: the contact fields open empty, and the user can fill them in.
+     expect(screen.getByLabelText('E-poçt')).toHaveValue('')
+-    expect(screen.getByLabelText('Telefon')).toHaveValue('')
+-    // No address in GET me: the field is still there, empty.
+-    expect(screen.getByLabelText('Ünvan')).toHaveValue('')
++    expect(screen.getByLabelText('Mobil telefon')).toHaveValue('')
++    // No address in GET me: the row is still there, with a dash.
++    expect(screen.getByText('Ünvan').nextElementSibling).toHaveTextContent('—')
+   })
+ 
+   it("puts GET me's contact in the editable fields and saves a change with PUT me", async () => {
+@@ -187,11 +187,8 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+ 
+     const email = await screen.findByLabelText('E-poçt')
+     expect(email).toHaveValue('ali@example.az')
+-    expect(screen.getByLabelText('Telefon')).toHaveValue('+994501234567')
+-    expect(screen.getByLabelText('FİN')).toHaveAttribute('readonly')
+-    // Read-only values stay reachable by keyboard, to be selected and copied.
+-    expect(screen.getByLabelText('FİN')).not.toHaveAttribute('tabindex')
+-    expect(email).not.toHaveAttribute('readonly')
++    // The field shows the country code beside it and holds the rest of the number.
++    expect(screen.getByLabelText('Mobil telefon')).toHaveValue('501234567')
+     // Nothing to save until something changes.
+     const save = screen.getByRole('button', { name: 'Yadda saxla' })
+     expect(save).toBeDisabled()
+@@ -211,6 +208,25 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     expect(save).toBeDisabled()
+   })
+ 
++  it('puts the saved contact details back on cancel', async () => {
++    identity({ '/identity/auth/me': () => ok(withContact) })
++    const user = userEvent.setup()
++    renderRoute('/az/cabinet/profile')
++
++    const email = await screen.findByLabelText('E-poçt')
++    const phone = screen.getByLabelText('Mobil telefon')
++    const cancel = screen.getByRole('button', { name: 'Ləğv et' })
++    expect(cancel).toBeDisabled()
++
++    await user.clear(email)
++    await user.type(phone, '9')
++    await user.click(cancel)
++
++    expect(email).toHaveValue('ali@example.az')
++    expect(phone).toHaveValue('501234567')
++    expect(screen.getByRole('button', { name: 'Yadda saxla' })).toBeDisabled()
++  })
++
+   it("words PUT me's validation error under the field it names", async () => {
+     const invalidPhone = Response.json(
+       {
+@@ -228,7 +244,7 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     const user = userEvent.setup()
+     renderRoute('/az/cabinet/profile')
+ 
+-    const phone = await screen.findByLabelText('Telefon')
++    const phone = await screen.findByLabelText('Mobil telefon')
+     await user.clear(phone)
+     await user.type(phone, '0501234567')
+     await user.click(screen.getByRole('button', { name: 'Yadda saxla' }))
+@@ -263,8 +279,7 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     })
+     renderRoute('/az/cabinet/profile')
+ 
+-    expect(await screen.findByLabelText('Ünvan')).toHaveValue('Bakı, Nizami küç. 1')
+-    expect(screen.getByLabelText('Ünvan')).toHaveAttribute('readonly')
++    expect(await screen.findByText('Bakı, Nizami küç. 1')).toBeVisible()
+     // The top bar shows the initials too; the profile's photo slot is the extra one.
+     expect(screen.getAllByText('Tİ').length).toBeGreaterThan(1)
+   })
+@@ -322,7 +337,7 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     expect(session?.user.photo).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgAB')
+   })
+ 
+-  it('shows the photo as an avatar in the top bar and whole on the profile', async () => {
++  it('shows the photo as an avatar in the top bar and on the profile card', async () => {
+     // jsdom loads no image, and the avatar shows one only once it has loaded.
+     vi.spyOn(HTMLImageElement.prototype, 'complete', 'get').mockReturnValue(true)
+     vi.spyOn(HTMLImageElement.prototype, 'naturalWidth', 'get').mockReturnValue(1)
+@@ -331,14 +346,14 @@ describe('mygov ID login through the Identity Service (flows A, B)', () => {
+     })
+     renderRoute('/az/cabinet/profile')
+ 
+-    await screen.findByLabelText('FİN')
++    await screen.findByText('FİN')
+     const photo = 'img[src="data:image/jpeg;base64,/9j/4AAQSkZJRgAB"]'
+     const userMenu = screen.getByRole('button', { name: /Test İstifadəçi/ })
+     expect(userMenu.querySelector(photo)).toBeInTheDocument()
+     expect(userMenu.querySelector(photo)).toHaveClass('object-cover')
+-    const [whole] = [...document.querySelectorAll(photo)].filter((img) => !userMenu.contains(img))
+-    expect(whole).toBeVisible()
+-    expect(whole).not.toHaveClass('object-cover')
++    const [onCard] = [...document.querySelectorAll(photo)].filter((img) => !userMenu.contains(img))
++    expect(onCard).toBeVisible()
++    expect(onCard).toHaveClass('object-cover')
+     expect(screen.queryByText('Tİ')).not.toBeInTheDocument()
+   })
+ 
+diff --git a/src/test/routing.test.tsx b/src/test/routing.test.tsx
+index 1c9dfc36c16e337c954092a1871dac5e7e80b936..26d4f40580e48b8898dac005e62117adcd7ae522 100644
+--- a/src/test/routing.test.tsx
++++ b/src/test/routing.test.tsx
+@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
+ import userEvent from '@testing-library/user-event'
+ import { describe, expect, it } from 'vitest'
+ 
++import { DEMO_SIGNED_IN_KEY } from '@/services/auth/mockAuthService'
+ import { renderRoute } from '@/test/renderRoute'
+ 
+ describe('routing', () => {
+@@ -37,7 +38,17 @@ describe('routing', () => {
+     }
+   })
+ 
++  it('names the cabinet entry of the public header after the signed-in person', async () => {
++    renderRoute('/az')
++    const header = within(await screen.findByRole('banner'))
++    expect(
++      await header.findByRole('link', { name: 'Şəxsi kabinet: Aygün Bərxudarova' }),
++    ).toHaveAttribute('href', '/az/cabinet')
++    expect(header.queryByRole('link', { name: /Şəxsi kabinetə daxil ol/ })).not.toBeInTheDocument()
++  })
++
+   it('keeps the public header down to the mark, language and cabinet entry', async () => {
++    window.sessionStorage.removeItem(DEMO_SIGNED_IN_KEY)
+     renderRoute('/az')
+     const header = within(await screen.findByRole('banner'))
+     expect(header.getByRole('link', { name: /Şəxsi kabinetə daxil ol/ })).toHaveAttribute(
+@@ -46,7 +57,7 @@ describe('routing', () => {
+     )
+     expect(header.queryByRole('link', { name: 'ANA SƏHİFƏ' })).not.toBeInTheDocument()
+     expect(header.queryByRole('link', { name: 'Mərkəzi Bank' })).not.toBeInTheDocument()
+-    expect(header.queryByRole('link', { name: 'ELEKTRON MÜRACİƏT' })).not.toBeInTheDocument()
++    expect(header.queryByRole('link', { name: 'ƏLAQƏ' })).not.toBeInTheDocument()
+   })
+ 
+   it('serves the English locale from /en', async () => {
+@@ -84,7 +95,7 @@ describe('legacy URLs', () => {
+     ['/News/List', /Xəbərlər/i],
+     ['/FAQ', /Tez-tez verilən suallar/i],
+     ['/Survey', /Sorğular/i],
+-    ['/Home/Contact', /ELEKTRON MÜRACİƏT/i],
++    ['/Home/Contact', /ƏLAQƏ/i],
+     ['/Home/About', /PORTAL HAQQINDA/i],
+   ])('%s redirects to its modern route', async (path, heading) => {
+     renderRoute(path)
