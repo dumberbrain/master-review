@@ -216,7 +216,7 @@ function nearestLock(paths, manifest, locks) {
   }
 }
 
-function priorityOf(file, changes) {
+function priorityOf(file, changes, generalRuleFiles) {
   const reasons = [];
   let score = 0;
   if (ENTRYPOINTS.some((re) => re.test(file.path))) {
@@ -229,7 +229,8 @@ function priorityOf(file, changes) {
   }
   if (file.lines >= LARGE_FILE_LINES) reasons.push(`${file.lines} lines`);
   score += Math.min(file.lines / 100, 6);
-  if (file.ruleFiles.length > 1) score += 2;
+  // Language-specific rules make a file worth more than one that only gets the general rules.
+  if (file.ruleFiles.some((id) => !generalRuleFiles.has(id))) score += 2;
   if (file.isTest) score -= 3;
   return { score, reasons };
 }
@@ -272,21 +273,23 @@ function tally(files) {
   return { languages, skippedByReason };
 }
 
-function findManifests(paths) {
+// `lockSearch` is every path in the repository, not only the scope: a workspace package's
+// lockfile usually sits at the repository root, above the scanned sub-folder.
+function findManifests(paths, lockSearch) {
   const manifests = [];
   for (const p of paths) {
     const m = MANIFESTS.find((x) => matchGlob(x.glob, p.split('/').pop()));
-    if (m) manifests.push({ path: p, ecosystem: m.ecosystem, lockfile: m.locks ? nearestLock(paths, p, m.locks) : undefined });
+    if (m) manifests.push({ path: p, ecosystem: m.ecosystem, lockfile: m.locks ? nearestLock(lockSearch, p, m.locks) : undefined });
   }
   return manifests;
 }
 
-function buildSignals({ paths, files, todoFiles, secretCandidates, changes, prefix, isGit }) {
+function buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, changes, prefix, isGit }) {
   const local = (p) => p.slice(prefix.length);
   const base = (p) => p.split('/').pop();
   const reviewable = new Map(files.filter((f) => !f.skipped).map((f) => [f.path, f]));
   const codeFiles = [...reviewable.values()].filter((f) => f.isCode);
-  const manifests = findManifests(paths);
+  const manifests = findManifests(paths, allPaths);
   const top = (list, by) => [...list].sort(by).slice(0, TOP);
 
   return {
@@ -328,10 +331,11 @@ function contextFiles(paths, signals, prefix) {
   return [...new Set([...docs, ...signals.manifests.map((m) => m.path), ...signals.ci, ...config])].slice(0, 30);
 }
 
-function priorityFiles(files, changes, maxFiles) {
+function priorityFiles(files, changes, maxFiles, cfg) {
+  const generalRuleFiles = new Set(cfg.files.filter((f) => f.language === 'general').map((f) => f.id));
   return files
     .filter((f) => !f.skipped && f.isCode)
-    .map((f) => ({ f, ...priorityOf(f, changes.get(f.path)) }))
+    .map((f) => ({ f, ...priorityOf(f, changes.get(f.path), generalRuleFiles) }))
     .sort((a, b) => b.score - a.score || a.f.path.localeCompare(b.f.path))
     .slice(0, maxFiles)
     .map(({ f, reasons }) => ({ path: f.path, lines: f.lines, ruleFiles: f.ruleFiles, reasons }));
@@ -353,13 +357,14 @@ export function scanRepo(root, cfg, { scope = '', maxFiles = 40, useGit = true, 
   const absRoot = path.resolve(root);
   const listing = listFiles(absRoot, { useGit });
   const prefix = scopePrefix(scope);
-  const paths = listing.paths.map(posix).filter((p) => p.startsWith(prefix));
+  const allPaths = listing.paths.map(posix);
+  const paths = allPaths.filter((p) => p.startsWith(prefix));
   const isGit = listing.source === 'git';
   const changes = isGit ? churn(absRoot) : new Map();
 
   const { files, todoFiles, secretCandidates } = scanContents(absRoot, paths, cfg, { includeTooling });
   const { languages, skippedByReason } = tally(files);
-  const signals = buildSignals({ paths, files, todoFiles, secretCandidates, changes, prefix, isGit });
+  const signals = buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, changes, prefix, isGit });
   const reviewable = files.filter((f) => !f.skipped);
 
   return {
@@ -379,7 +384,7 @@ export function scanRepo(root, cfg, { scope = '', maxFiles = 40, useGit = true, 
     skippedByReason,
     signals,
     context: contextFiles(paths, signals, prefix),
-    priority: priorityFiles(files, changes, maxFiles),
+    priority: priorityFiles(files, changes, maxFiles, cfg),
     files,
   };
 }

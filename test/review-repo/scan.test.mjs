@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { loadRuleSet } from '../../.claude/skills/review-repo/lib/rules.mjs';
 import { REPO_PACKS } from '../../.claude/skills/review-repo/lib/repo-findings.mjs';
 import { findSecrets, redact, scanRepo } from '../../.claude/skills/review-repo/lib/scan.mjs';
+import { lines, tempDir, writeTree } from '../helpers.mjs';
 import { FAKE_AWS, FAKE_PASSWORD, fixtureRepo } from './fixture.mjs';
 
 const RULES = loadRuleSet({ extraPacks: REPO_PACKS });
@@ -82,4 +83,28 @@ test('findSecrets ignores placeholders and redacts values', () => {
   assert.deepEqual(findSecrets(`client_secret = '${FAKE_PASSWORD}'`), [{ kind: 'assignment', preview: redact(FAKE_PASSWORD) }]);
   assert.equal(redact('abcdefgh'), 'abcd… (8 chars)');
   assert.deepEqual(findSecrets(['-----BEGIN RSA ', 'PRIVATE KEY-----'].join('')), [{ kind: 'private-key', preview: 'PRIVATE KEY block' }]);
+});
+
+test('scan --path finds a workspace lockfile above the scanned sub-folder', (t) => {
+  const dir = tempDir(t);
+  writeTree(dir, {
+    'package.json': '{ "name": "mono", "workspaces": ["packages/*"] }\n',
+    'package-lock.json': '{}\n',
+    'packages/web/package.json': '{ "name": "web" }\n',
+    'packages/web/src/index.js': lines('start();'),
+  });
+  const { signals } = scanRepo(dir, RULES, { useGit: false, scope: 'packages/web' });
+  assert.deepEqual(signals.manifests, [{ path: 'packages/web/package.json', ecosystem: 'node', lockfile: 'package-lock.json' }]);
+  assert.deepEqual(signals.missingLockfiles, []);
+});
+
+test('scan priority ranks files with language rules above files with only general rules', (t) => {
+  const dir = tempDir(t);
+  const body = lines('a = 1', 'b = 2', 'c = 3');
+  // Same size, no entrypoint, no history: only the language-rules bonus differs.
+  // Alphabetical order alone would put a.py first.
+  writeTree(dir, { 'a.py': body, 'b.js': body });
+  const scan = scanRepo(dir, RULES, { useGit: false });
+  assert.deepEqual(scan.priority.map((p) => p.path), ['b.js', 'a.py']);
+  assert.deepEqual(scan.priority[1].ruleFiles, GENERAL);
 });
