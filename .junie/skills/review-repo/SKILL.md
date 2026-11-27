@@ -68,6 +68,9 @@ the report itself, both in the current working directory.
    this step when the `repo` pack is disabled).
    Verify every signal before reporting it: open the line of each secret candidate, check that a
    "missing lockfile" belongs to an application and not a library, check what CI really runs.
+   `secretCandidates` lists non-test files first and is capped; when `secretCandidatesTotal` is
+   larger than its length, say in the summary that not every candidate was listed and suggest a
+   dedicated secret scanner.
    **Never copy a secret value into a finding** — refer to the file and line and say what kind
    of secret it is.
 

@@ -85,6 +85,31 @@ test('findSecrets ignores placeholders and redacts values', () => {
   assert.deepEqual(findSecrets(['-----BEGIN RSA ', 'PRIVATE KEY-----'].join('')), [{ kind: 'private-key', preview: 'PRIVATE KEY block' }]);
 });
 
+test('findSecrets reports every match on a line, also after a placeholder', () => {
+  const second = ['AKIA', 'QRSTUVWXYZ012345'].join('');
+  assert.deepEqual(
+    findSecrets(`keys = ["${FAKE_AWS}", "${second}"]`).map((h) => h.preview),
+    [redact(FAKE_AWS), redact(second)],
+  );
+  assert.deepEqual(findSecrets(`password: "changeme", apiKey: "${FAKE_PASSWORD}"`), [
+    { kind: 'assignment', preview: redact(FAKE_PASSWORD) },
+  ]);
+});
+
+test('scan lists secret candidates of non-test files before test fixtures and reports the total', (t) => {
+  const dir = tempDir(t);
+  const fixture = Array.from({ length: 120 }, (_, i) => `const user${i} = { password: "${FAKE_PASSWORD}${i}" };`);
+  // "__tests__/" sorts before "src/", so before the fix the fixture used up the whole limit.
+  writeTree(dir, {
+    '__tests__/fixtures.test.js': lines(...fixture),
+    'src/config.js': lines(`const password = "${FAKE_PASSWORD}";`),
+  });
+  const { signals } = scanRepo(dir, RULES, { useGit: false });
+  assert.equal(signals.secretCandidates.length, 100);
+  assert.deepEqual(signals.secretCandidates[0], { path: 'src/config.js', line: 1, kind: 'assignment', preview: redact(FAKE_PASSWORD) });
+  assert.equal(signals.secretCandidatesTotal, 121);
+});
+
 test('scan --path finds a workspace lockfile above the scanned sub-folder', (t) => {
   const dir = tempDir(t);
   writeTree(dir, {

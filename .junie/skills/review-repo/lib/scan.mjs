@@ -93,7 +93,8 @@ const SECRET_PATTERNS = [
     kind: 'assignment',
     re: /\b[\w.-]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)["']?\s*[:=]\s*["']([^"'\s]{6,})["']/i,
   },
-];
+].map((p) => ({ ...p, re: new RegExp(p.re.source, `${p.re.flags}g`) })); // "g": every match on a line, not only the first
+const MAX_SECRET_CANDIDATES = 100;
 const PLACEHOLDER = /^[$<{%*]|\$\{|^(x+|changeme|change-me|password|secret|example|placeholder|your[\w-]*|todo|redacted|dummy|test|null|none|undefined)$/i;
 const TODO = /\b(TODO|FIXME|HACK)\b/;
 
@@ -170,11 +171,12 @@ export function redact(value) {
 export function findSecrets(line) {
   const hits = [];
   for (const { kind, re } of SECRET_PATTERNS) {
-    const m = re.exec(line);
-    if (!m) continue;
-    const value = m[1] ?? m[0];
-    if (m[1] !== undefined && PLACEHOLDER.test(value)) continue;
-    hits.push({ kind, preview: kind === 'private-key' ? 'PRIVATE KEY block' : redact(value) });
+    // A placeholder match is skipped, but later matches of the same pattern are still checked.
+    for (const m of line.matchAll(re)) {
+      const value = m[1] ?? m[0];
+      if (m[1] !== undefined && PLACEHOLDER.test(value)) continue;
+      hits.push({ kind, preview: kind === 'private-key' ? 'PRIVATE KEY block' : redact(value) });
+    }
   }
   return hits;
 }
@@ -236,10 +238,13 @@ function priorityOf(file, changes, generalRuleFiles) {
 }
 
 // Reads every text file once: line counts, TODO markers and secret candidates.
+// Candidates in test files are kept apart and listed after the others, so fake values in
+// fixtures cannot use up the limit before real secrets elsewhere are found.
 function scanContents(root, paths, cfg, opts) {
   const files = [];
   const todoFiles = [];
-  const secretCandidates = [];
+  const found = { main: [], tests: [] };
+  let secretTotal = 0;
   for (const rel of paths) {
     const { file, text } = describe(root, rel, cfg, opts);
     files.push(file);
@@ -249,12 +254,15 @@ function scanContents(root, paths, cfg, opts) {
       if (line.length > MAX_SCAN_LINE) return;
       if (TODO.test(line)) todoLines.push(i + 1);
       for (const hit of findSecrets(line)) {
-        if (secretCandidates.length < 100) secretCandidates.push({ path: rel, line: i + 1, ...hit });
+        secretTotal++;
+        const list = file.isTest ? found.tests : found.main;
+        if (list.length < MAX_SECRET_CANDIDATES) list.push({ path: rel, line: i + 1, ...hit });
       }
     });
     if (todoLines.length) todoFiles.push({ path: rel, count: todoLines.length, lines: todoLines.slice(0, 5) });
   }
-  return { files, todoFiles, secretCandidates };
+  const secretCandidates = [...found.main, ...found.tests].slice(0, MAX_SECRET_CANDIDATES);
+  return { files, todoFiles, secretCandidates, secretTotal };
 }
 
 function tally(files) {
@@ -284,7 +292,7 @@ function findManifests(paths, lockSearch) {
   return manifests;
 }
 
-function buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, changes, prefix, isGit }) {
+function buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, secretTotal, changes, prefix, isGit }) {
   const local = (p) => p.slice(prefix.length);
   const base = (p) => p.split('/').pop();
   const reviewable = new Map(files.filter((f) => !f.skipped).map((f) => [f.path, f]));
@@ -304,6 +312,8 @@ function buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, cha
     },
     sensitiveFiles: paths.filter((p) => SENSITIVE_FILE.some((re) => re.test(base(p))) && !NOT_SENSITIVE.test(base(p))),
     secretCandidates,
+    // Larger than secretCandidates.length when the list was cut at MAX_SECRET_CANDIDATES.
+    secretCandidatesTotal: secretTotal,
     todos: {
       total: todoFiles.reduce((n, f) => n + f.count, 0),
       files: top(todoFiles, (a, b) => b.count - a.count),
@@ -362,9 +372,9 @@ export function scanRepo(root, cfg, { scope = '', maxFiles = 40, useGit = true, 
   const isGit = listing.source === 'git';
   const changes = isGit ? churn(absRoot) : new Map();
 
-  const { files, todoFiles, secretCandidates } = scanContents(absRoot, paths, cfg, { includeTooling });
+  const { files, todoFiles, secretCandidates, secretTotal } = scanContents(absRoot, paths, cfg, { includeTooling });
   const { languages, skippedByReason } = tally(files);
-  const signals = buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, changes, prefix, isGit });
+  const signals = buildSignals({ paths, allPaths, files, todoFiles, secretCandidates, secretTotal, changes, prefix, isGit });
   const reviewable = files.filter((f) => !f.skipped);
 
   return {
