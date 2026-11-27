@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { loadRuleSet } from '../../.claude/skills/review-repo/lib/rules.mjs';
 import { REPO_PACKS } from '../../.claude/skills/review-repo/lib/repo-findings.mjs';
-import { findSecrets, redact, scanRepo } from '../../.claude/skills/review-repo/lib/scan.mjs';
+import { findSecrets, parseChurn, redact, scanRepo } from '../../.claude/skills/review-repo/lib/scan.mjs';
 import { lines, tempDir, writeTree } from '../helpers.mjs';
 import { FAKE_AWS, FAKE_PASSWORD, fixtureRepo } from './fixture.mjs';
 
@@ -132,4 +133,39 @@ test('scan priority ranks files with language rules above files with only genera
   const scan = scanRepo(dir, RULES, { useGit: false });
   assert.deepEqual(scan.priority.map((p) => p.path), ['b.js', 'a.py']);
   assert.deepEqual(scan.priority[1].ruleFiles, GENERAL);
+});
+
+test('parseChurn adds the changes made under a former name to the current name', () => {
+  // Newest first, as git log prints it: b.js -> c.js, then a.js -> b.js, then edits of a.js.
+  const out = ['M', 'c.js', 'R100', 'b.js', 'c.js', 'M', 'b.js', 'R095', 'a.js', 'b.js', 'M', 'a.js', 'A', 'a.js', 'C080', 'c.js', 'copy.js', ''].join('\0');
+  assert.deepEqual(Object.fromEntries(parseChurn(out)), { 'c.js': 6, 'copy.js': 1 });
+});
+
+test('scan hotspots follow renamed and non-ASCII files through git history', (t) => {
+  const git = (dir, ...args) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { stdio: 'ignore' });
+  try {
+    execFileSync('git', ['--version'], { stdio: 'ignore' });
+  } catch {
+    t.skip('git is not installed');
+    return;
+  }
+  const dir = tempDir(t);
+  git(dir, 'init', '-q');
+  const commit = (files, msg) => {
+    writeTree(dir, files);
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', msg);
+  };
+  commit({ 'src/orderService.js': lines('a();'), 'src/sifariş.js': lines('x();') }, 'add');
+  commit({ 'src/orderService.js': lines('a();', 'b();'), 'src/sifariş.js': lines('x();', 'y();') }, 'edit');
+  git(dir, 'mv', 'src/orderService.js', 'src/orders.js');
+  git(dir, 'commit', '-q', '-m', 'rename');
+  commit({ 'src/orders.js': lines('a();', 'b();', 'c();') }, 'edit after rename');
+
+  const { signals } = scanRepo(dir, RULES);
+  const hotspots = Object.fromEntries(signals.hotspots.map((h) => [h.path, h.changes]));
+  // 2 changes as orderService.js + the rename + 1 change as orders.js.
+  assert.equal(hotspots['src/orders.js'], 4);
+  assert.equal(hotspots['src/sifariş.js'], 2);
+  assert.equal(hotspots['src/orderService.js'], undefined);
 });

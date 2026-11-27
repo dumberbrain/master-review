@@ -149,19 +149,37 @@ function gitInfo(root) {
   }
 }
 
-// Change counts per path over the last year; paths are relative to `root` (--relative).
-function churn(root) {
+/**
+ * Change counts per current path from `git log --name-status -M -z --format=` output.
+ * The log runs newest first, so when a rename "R<score> old new" is seen, every older change
+ * of `old` belongs to the file that `new` is called today. Copies ("C") keep both names.
+ */
+export function parseChurn(out) {
   const counts = new Map();
-  try {
-    const out = git(root, ['log', '--since=12.months', '--no-merges', '--relative', '--name-only', '--format=']);
-    for (const line of out.split('\n')) {
-      const p = line.trim();
-      if (p) counts.set(p, (counts.get(p) ?? 0) + 1);
-    }
-  } catch {
-    // no history
+  const currentName = new Map(); // a former name -> the file's name today
+  const tokens = out.split('\0').map((t) => t.replace(/^\n+/, ''));
+  for (let i = 0; i < tokens.length; i++) {
+    const status = tokens[i];
+    if (!/^[A-Z]\d*$/.test(status)) continue;
+    const twoPaths = status[0] === 'R' || status[0] === 'C';
+    const p = twoPaths ? tokens[i + 2] : tokens[i + 1];
+    if (!p) break;
+    const name = currentName.get(p) ?? p;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    if (status[0] === 'R') currentName.set(tokens[i + 1], name);
+    i += twoPaths ? 2 : 1;
   }
   return counts;
+}
+
+// Change counts per path over the last year; paths are relative to `root` (--relative).
+// -z: paths are never quoted, so non-ASCII names match the file list.
+function churn(root) {
+  try {
+    return parseChurn(git(root, ['log', '--since=12.months', '--no-merges', '--relative', '--name-status', '-M', '-z', '--format=']));
+  } catch {
+    return new Map(); // no history
+  }
 }
 
 export function redact(value) {
