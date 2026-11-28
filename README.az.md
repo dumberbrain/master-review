@@ -1,5 +1,7 @@
 # master-review
 
+![master-review: süni intellektlə kod review](docs/assets/banner.jpeg)
+
 [English](README.md) | **Azərbaycanca**
 
 AI kodlaşdırma agentləri üçün kod review skill-ləri. Agentinizə pull request diff-i və ya bütöv

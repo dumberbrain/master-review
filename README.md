@@ -1,5 +1,7 @@
 # master-review
 
+![master-review: AI-powered code review](docs/assets/banner.jpeg)
+
 **English** | [Azərbaycanca](README.az.md)
 
 Code-review skills for AI coding agents. Give your agent a pull request diff or a whole
